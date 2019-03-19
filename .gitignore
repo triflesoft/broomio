@@ -1,0 +1,7 @@
+.vscode
+*.code-workspace
+*.egg-info
+*.pyc
+*.sh
+build
+dist
