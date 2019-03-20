@@ -72,12 +72,21 @@ class _LoopInfo(object):
         # Deque with tasks ready to be executed.
         # These are new tasks or tasks for which requested syscall completed.
         self.task_deque = deque()
+
+        # SPEED: Much faster than declaring method, which calls method.
+        # SPEED:
+        # SPEED: def task_enqueue_old(self, task_info): # THIS IS SLOW
+        # SPEED:     self.task_deque.append(task_info)  # THIS IS SLOW
+        # SPEED:
         self.task_enqueue_old = self.task_deque.append
+
         # Root nursery.
         self.task_nursery = task_nursery
+
         # HeapQ with tasks scheduled to run later.9o
         self.time_heapq = []
         self.now = 0
+
         # For Linux: \
         # Array of sockets. Indexes in list are file descriptors. O(1) access time.
         # Why can we do this? Man page socket(2) states:
@@ -91,11 +100,23 @@ class _LoopInfo(object):
         # No assumptions about socket file descriptor values' range \
         # can possibly be deducted from MSDN.
         self.sock_array = [_SocketInfo(fileno) for fileno in range(nofile_hard)]
+
+        # SPEED: Much faster than declaring method, which calls method.
+        # SPEED:
+        # SPEED: def get_sock_info(self, fileno):   # THIS IS SLOW
+        # SPEED:     return self.sock_array[fileno] # THIS IS SLOW
+        # SPEED:
         self.get_sock_info = self.sock_array.__getitem__
+
         # Number of sockets waiting to become readable.
         self.socket_recv_count = 0
+
         # Number of sockets waiting to become writable.
         self.socket_send_count = 0
+
+        # Linux specific for now.
+        # TODO: Support poll.
+        # TODO: Support select.
         self.socket_epoll = epoll(1024)
 
     def task_enqueue_new(self, coro, parent_task_info, nursery):

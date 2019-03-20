@@ -37,6 +37,8 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
                 # Current time as reference for timers.
                 self._info.now = time()
 
+                # SPEED: Testing if collection is empty before calling method is much faster.
+                # SPEED: If collection is empty, method is not called.
                 # Are there tasks ready for execution?
                 if len(self._info.task_deque) > 0:
                     self._process_task()
