@@ -1,7 +1,3 @@
-from .._syscalls import SYSCALL_NURSERY_JOIN
-from .._syscalls import SYSCALL_NURSERY_KILL
-from .._syscalls import SYSCALL_NURSERY_START_AFTER
-from .._syscalls import SYSCALL_NURSERY_START_SOON
 from .._syscalls import SYSCALL_SOCKET_ACCEPT
 from .._syscalls import SYSCALL_SOCKET_CLOSE
 from .._syscalls import SYSCALL_SOCKET_CONNECT
@@ -12,7 +8,6 @@ from .._syscalls import SYSCALL_SOCKET_RECVFROM_INTO
 from .._syscalls import SYSCALL_SOCKET_SEND
 from .._syscalls import SYSCALL_SOCKET_SENDTO
 from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
-from .._syscalls import SYSCALL_TASK_SLEEP
 from socket import AF_INET
 from socket import AF_INET6
 from socket import IPPROTO_TCP

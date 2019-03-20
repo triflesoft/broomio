@@ -1,9 +1,4 @@
 from . import socket
-from .._info import _TaskInfo
-from .._syscalls import SYSCALL_NURSERY_JOIN
-from .._syscalls import SYSCALL_NURSERY_KILL
-from .._syscalls import SYSCALL_NURSERY_START_AFTER
-from .._syscalls import SYSCALL_NURSERY_START_SOON
 from .._syscalls import SYSCALL_SOCKET_ACCEPT
 from .._syscalls import SYSCALL_SOCKET_CLOSE
 from .._syscalls import SYSCALL_SOCKET_CONNECT
@@ -14,14 +9,13 @@ from .._syscalls import SYSCALL_SOCKET_RECVFROM_INTO
 from .._syscalls import SYSCALL_SOCKET_SEND
 from .._syscalls import SYSCALL_SOCKET_SENDTO
 from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
-from .._syscalls import SYSCALL_TASK_SLEEP
 
 
 class LoopSockEpoll(object):
     def __init__(self):
         self._info = None
 
-    def _process_sock_array(self):
+    def _process_sock(self):
         # If any tasks are scheduled to be run later, do not make them late.
         # Otherwise wait for 5 second.
         # TODO: Justify timeout value, currently 5 seconds.
@@ -62,14 +56,12 @@ class LoopSockEpoll(object):
                             while True:
                                 client_socket, client_address = sock.accept()
                                 handler = handler_factory(socket(sock=client_socket), client_address)
-                                handler_task_info = _TaskInfo(handler, task_info, nursery)
-                                self._info.task_deque.append(handler_task_info)
+                                self._info.task_enqueue_new(handler, task_info, nursery)
                         except OSError:
                             pass
 
-                        self._info.task_deque.append(task_info)
+                        self._info.task_enqueue_old(task_info)
 
-                        del handler_task_info
                         del handler
                         del client_address
                         del client_socket
@@ -82,7 +74,7 @@ class LoopSockEpoll(object):
                         data = sock.recv(size)
                         # Enqueue task.
                         task_info.send_args = data
-                        self._info.task_deque.append(task_info)
+                        self._info.task_enqueue_old(task_info)
 
                         del data
                         del size
@@ -93,7 +85,7 @@ class LoopSockEpoll(object):
                         size = sock.recv_into(data, size)
                         # Enqueue task.
                         task_info.send_args = size
-                        self._info.task_deque.append(task_info)
+                        self._info.task_enqueue_old(task_info)
 
                         del data
                         del size
@@ -104,7 +96,7 @@ class LoopSockEpoll(object):
                         data, addr = sock.recvfrom(size)
                         # Enqueue task.
                         task_info.send_args = data, addr
-                        self._info.task_deque.append(task_info)
+                        self._info.task_enqueue_old(task_info)
 
                         del addr
                         del data
@@ -116,7 +108,7 @@ class LoopSockEpoll(object):
                         size, addr = sock.recvfrom_into(data, size)
                         # Enqueue task.
                         task_info.send_args = size, addr
-                        self._info.task_deque.append(task_info)
+                        self._info.task_enqueue_old(task_info)
 
                         del addr
                         del size
@@ -179,7 +171,7 @@ class LoopSockEpoll(object):
                         size = sock.send(data)
                         # Enqueue task.
                         task_info.send_args = size
-                        self._info.task_deque.append(task_info)
+                        self._info.task_enqueue_old(task_info)
 
                         del data
                         del size
@@ -189,7 +181,7 @@ class LoopSockEpoll(object):
                         size = sock.sendto(data, addr)
                         # Enqueue task.
                         task_info.send_args = size
-                        self._info.task_deque.append(task_info)
+                        self._info.task_enqueue_old(task_info)
 
                         del size
                         del addr
@@ -200,3 +192,6 @@ class LoopSockEpoll(object):
                         pass
                     else:
                         raise Exception(f'Unexpected syscall {task_info.yield_func}.')
+
+        return True
+

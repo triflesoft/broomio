@@ -1,7 +1,7 @@
 from collections import deque
-from select import epoll
 from resource import getrlimit
 from resource import RLIMIT_NOFILE
+from select import epoll
 
 
 #
@@ -61,7 +61,10 @@ class _SocketInfo(object):
 # Loop intofmation
 #
 class _LoopInfo(object):
-    __slots__ = 'task_deque', 'task_nursery', 'now', 'time_heapq', 'sock_array', 'sock_dict', 'socket_recv_count', 'socket_send_count', 'socket_epoll'
+    __slots__ = \
+        'task_deque', 'task_enqueue_old', 'task_nursery', \
+        'time_heapq', 'now', \
+        'sock_array', 'sock_dict', 'get_sock_info', 'socket_recv_count', 'socket_send_count', 'socket_epoll'
 
     def __init__(self, task_nursery):
         _, nofile_hard = getrlimit(RLIMIT_NOFILE)
@@ -69,11 +72,12 @@ class _LoopInfo(object):
         # Deque with tasks ready to be executed.
         # These are new tasks or tasks for which requested syscall completed.
         self.task_deque = deque()
+        self.task_enqueue_old = self.task_deque.append
         # Root nursery.
         self.task_nursery = task_nursery
-        self.now = 0
         # HeapQ with tasks scheduled to run later.9o
         self.time_heapq = []
+        self.now = 0
         # For Linux: \
         # Array of sockets. Indexes in list are file descriptors. O(1) access time.
         # Why can we do this? Man page socket(2) states:
@@ -82,14 +86,19 @@ class _LoopInfo(object):
         # While some indexes will not be used, for instance 0, 1, and 2, because \
         # they will correspond to file descriptors opened by different means, we \
         # still may assume values of file descriptors to be small integers.
-        self.sock_array = [_SocketInfo(fileno) for fileno in range(nofile_hard)]
         # For Windows \
         # Dict of sockets. Keys in dict are file descriptors. O(log(N)) access time.
         # No assumptions about socket file descriptor values' range \
         # can possibly be deducted from MSDN.
-        self.sock_dict = {}
+        self.sock_array = [_SocketInfo(fileno) for fileno in range(nofile_hard)]
+        self.get_sock_info = self.sock_array.__getitem__
         # Number of sockets waiting to become readable.
         self.socket_recv_count = 0
         # Number of sockets waiting to become writable.
         self.socket_send_count = 0
         self.socket_epoll = epoll(1024)
+
+    def task_enqueue_new(self, coro, parent_task_info, nursery):
+        child_task_info = _TaskInfo(coro, parent_task_info, nursery)
+        self.task_deque.append(child_task_info)
+

@@ -39,13 +39,13 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
 
                 # Are there tasks ready for execution?
                 if len(self._info.task_deque) > 0:
-                    self._process_task_deque()
+                    self._process_task()
                 # Are there sockets to check for readiness?
                 elif self._info.socket_recv_count + self._info.socket_send_count > 0:
-                    self._process_sock_array()
+                    self._process_sock()
                 # Are there task which are scheduled to run later?
                 elif len(self._info.time_heapq) > 0:
-                    self._process_time_heapq()
+                    self._process_time()
                 else:
                     # Nothing to do, stop loop.
                     running = False

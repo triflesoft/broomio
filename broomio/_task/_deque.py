@@ -16,7 +16,6 @@ from .._syscalls import SYSCALL_SOCKET_SENDTO
 from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
 from .._syscalls import SYSCALL_TASK_SLEEP
 from heapq import heapify
-from heapq import heappop
 from heapq import heappush
 
 
@@ -39,7 +38,7 @@ class LoopTaskDeque(object):
     def __init__(self):
         self._info = None
 
-    def _process_task_deque(self):
+    def _process_task(self):
         # Cycle while there are tasks ready for execution.
         # New tasks may be enqueued while this loop cycles.
         while len(self._info.task_deque) > 0:
@@ -127,7 +126,7 @@ class LoopTaskDeque(object):
 
                         sock = task_info.yield_args[0]
                         fileno = sock.fileno()
-                        socket_info = self._info.sock_array[fileno]
+                        socket_info = self._info.get_sock_info(fileno)
 
                         assert socket_info.recv_task_info is None, f'Another task {socket_info.recv_task_info.coro} is already receiving on this socket.'
                         assert task_info.recv_fileno is None, 'Task is already waiting for another socket to become readable.'
@@ -234,7 +233,7 @@ class LoopTaskDeque(object):
                         # Some kind of socket writing.
                         sock = task_info.yield_args[0]
                         fileno = sock.fileno()
-                        socket_info = self._info.sock_array[fileno]
+                        socket_info = self._info.get_sock_info(fileno)
 
                         assert socket_info.send_task_info is None, f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
                         assert task_info.recv_fileno is None, 'Task is already waiting for another socket to become readable.'
@@ -373,7 +372,7 @@ class LoopTaskDeque(object):
 
                         if not child.recv_fileno is None:
                             # This task is waiting for socket to become readable.
-                            socket_info = self._info.sock_array[child.recv_fileno]
+                            socket_info = self._info.get_sock_info(child.recv_fileno)
 
                             assert child == socket_info.recv_task_info, 'Internal data structures are damaged.'
 
@@ -397,7 +396,7 @@ class LoopTaskDeque(object):
                             del socket_info
                         elif not child.send_fileno is None:
                             # This task is waiting for socket to become writable.
-                            socket_info = self._info.sock_array[fileno]
+                            socket_info = self._info.get_sock_info(fileno)
 
                             assert child == socket_info.send_task_info, 'Internal data structures are damaged.'
 
@@ -444,3 +443,6 @@ class LoopTaskDeque(object):
 
                     del has_time_changes
                 del nursery
+
+
+        return True
