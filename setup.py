@@ -19,7 +19,7 @@ setup(
     long_description=readme_text,
     long_description_content_type='text/markdown',
     url='https://github.com/triflesoft/broomio',
-    packages=find_packages(exclude=('tests', 'docs')),
+    packages=find_packages(exclude=('docs', 'examples', 'tests')),
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Console',
