@@ -1,4 +1,5 @@
 from . import socket
+from . import _get_socket_exception
 from .._syscalls import SYSCALL_SOCKET_ACCEPT
 from .._syscalls import SYSCALL_SOCKET_CLOSE
 from .._syscalls import SYSCALL_SOCKET_CONNECT
@@ -25,173 +26,224 @@ class LoopSockEpoll(object):
         for fileno, event in events:
             socket_info = self._info.sock_array[fileno]
 
-            if (event & 0x_0001) == 0x_0001:
-                # Socket is readable.
-                task_info = socket_info.recv_task_info
-
-                if task_info is None:
-                    # No task awaits for socket to become readable.
-                    # Mark as readale.
-                    socket_info.recv_ready = True
-
-                    # Note that socket may be registered for writing notification.
-                    socket_info.event_mask &= 0x_FFFE # ~0x_0001
-
-                    if socket_info.event_mask == 0:
-                        self._info.socket_epoll.unregister(fileno)
-                    else:
-                        self._info.socket_epoll.modify(fileno, socket_info.event_mask)
-
+            if (event & 0x_0008) == 0x_0008: # EPOLLERR
+                # Socket failed.
+                # Close socket.
+                # Is socket registered for reading notification?
+                if socket_info.event_mask & 0x_0001 == 0x_0001: # EPOLLIN
                     self._info.socket_recv_count -= 1
-                else:
-                    # Unbind task and socket.
-                    task_info.recv_fileno = None
-                    socket_info.recv_task_info = None
 
-                    if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
-                        # Accept as many connections as possible.
-                        sock, nursery, handler_factory = task_info.yield_args
-
-                        try:
-                            while True:
-                                client_socket, client_address = sock.accept()
-                                handler = handler_factory(socket(sock=client_socket), client_address)
-                                self._info.task_enqueue_new(handler, task_info, nursery)
-                        except OSError:
-                            pass
-
-                        self._info.task_enqueue_old(task_info)
-
-                        del handler
-                        del client_address
-                        del client_socket
-                        del handler_factory
-                        del nursery
-                        del sock
-                    elif task_info.yield_func == SYSCALL_SOCKET_RECV:
-                        # Receive data.
-                        sock, size = task_info.yield_args
-                        data = sock.recv(size)
-                        # Enqueue task.
-                        task_info.send_args = data
-                        self._info.task_enqueue_old(task_info)
-
-                        del data
-                        del size
-                        del sock
-                    elif task_info.yield_func == SYSCALL_SOCKET_RECV_INTO:
-                        # Receive data.
-                        sock, data, size = task_info.yield_args
-                        size = sock.recv_into(data, size)
-                        # Enqueue task.
-                        task_info.send_args = size
-                        self._info.task_enqueue_old(task_info)
-
-                        del data
-                        del size
-                        del sock
-                    elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM:
-                        # Receive data.
-                        sock, size = task_info.yield_args
-                        data, addr = sock.recvfrom(size)
-                        # Enqueue task.
-                        task_info.send_args = data, addr
-                        self._info.task_enqueue_old(task_info)
-
-                        del addr
-                        del data
-                        del size
-                        del sock
-                    elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM_INTO:
-                        # Receive data.
-                        sock, data, size = task_info.yield_args
-                        size, addr = sock.recvfrom_into(data, size)
-                        # Enqueue task.
-                        task_info.send_args = size, addr
-                        self._info.task_enqueue_old(task_info)
-
-                        del addr
-                        del size
-                        del data
-                        del sock
-                    else:
-                        raise Exception(f'Unexpected syscall {task_info.yield_func}.')
-
-            if (event & 0x_0004) == 0x_0004:
-                # Socket is writable.
-                task_info = socket_info.send_task_info
-
-                if task_info is None:
-                    # No task awaits for socket to become writable.
-                    # Mark as writable.
-                    socket_info.send_ready = True
-
-                    # Note that socket may be registered for reading notification.
-                    socket_info.event_mask &= 0x_FFFB # ~0x_0004
-
-                    if socket_info.event_mask == 0:
-                        self._info.socket_epoll.unregister(fileno)
-                    else:
-                        self._info.socket_epoll.modify(fileno, socket_info.event_mask)
-
+                # Is socket registered for writing notification?
+                if socket_info.event_mask & 0x_0004 == 0x_0004: # EPOLLOUT
                     self._info.socket_send_count -= 1
-                else:
-                    # Unbind task and socket.
-                    task_info.send_fileno = None
-                    socket_info.send_task_info = None
 
-                    if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
-                        # Close socket.
-                        # Is socket registered for reading notification?
-                        if socket_info.event_mask & 0x_0001 == 0x_0001:
-                            self._info.socket_recv_count -= 1
+                self._info.socket_epoll.unregister(fileno)
 
-                        # Is socket registered for writing notification?
-                        if socket_info.event_mask & 0x_0004 == 0x_0004:
-                            self._info.socket_send_count -= 1
+                # Get socket.
+                if socket_info.send_task_info:
+                    sock = socket_info.send_task_info.yield_args[0]
+                elif socket_info.recv_task_info:
+                    sock = socket_info.recv_task_info.yield_args[0]
 
-                        self._info.socket_epoll.unregister(fileno)
+                # Get exception.
+                exception = _get_socket_exception(sock)
 
-                        sock = task_info.yield_args[0]
+                # Enqueue throwing exception.
+                if socket_info.send_task_info:
+                    socket_info.send_task_info.send_fileno = None
+                    socket_info.send_task_info.throw_args = (exception, )
+                    self._info.task_enqueue_old(socket_info.send_task_info)
 
-                        # Close socket and reset socket info.
-                        sock.close()
-                        socket_info.recv_task_info = None
-                        socket_info.recv_ready = False
-                        socket_info.send_ready = False
-                        socket_info.event_mask = 0
+                # Enqueue throwing exception.
+                if socket_info.recv_task_info:
+                    socket_info.recv_task_info.recv_fileno = None
+                    socket_info.recv_task_info.throw_args = (exception, )
+                    self._info.task_enqueue_old(socket_info.send_task_info)
 
-                        del sock
-                    elif task_info.yield_func == SYSCALL_SOCKET_CONNECT:
-                        # TODO: SYSCALL_SOCKET_CONNECT is not implemented yet.
-                        pass
-                    elif task_info.yield_func == SYSCALL_SOCKET_SEND:
-                        # Send data.
-                        sock, data = task_info.yield_args
-                        size = sock.send(data)
-                        # Enqueue task.
-                        task_info.send_args = size
-                        self._info.task_enqueue_old(task_info)
+                # Close socket and reset socket info.
+                sock.close()
+                socket_info.send_task_info = None
+                socket_info.recv_task_info = None
+                socket_info.recv_ready = False
+                socket_info.send_ready = False
+                socket_info.event_mask = 0
 
-                        del data
-                        del size
-                    elif task_info.yield_func == SYSCALL_SOCKET_SENDTO:
-                        # Send data.
-                        sock, data, addr = task_info.yield_args
-                        size = sock.sendto(data, addr)
-                        # Enqueue task.
-                        task_info.send_args = size
-                        self._info.task_enqueue_old(task_info)
+                del exception
+                del sock
+            else:
+                if (event & 0x_0001) == 0x_0001: # EPOLLIN
+                    # Socket is readable.
+                    task_info = socket_info.recv_task_info
 
-                        del size
-                        del addr
-                        del data
-                        del sock
-                    elif task_info.yield_func == SYSCALL_SOCKET_SHUTDOWN:
-                        # TODO: SYSCALL_SOCKET_SHUTDOWN is not implemented yet.
-                        pass
+                    if task_info is None:
+                        # No task awaits for socket to become readable.
+                        # Mark as readale.
+                        socket_info.recv_ready = True
+
+                        # Note that socket may be registered for writing notification.
+                        socket_info.event_mask &= 0x_FFFE # ~0x_0001 EPOLLIN
+
+                        if socket_info.event_mask == 0:
+                            self._info.socket_epoll.unregister(fileno)
+                        else:
+                            self._info.socket_epoll.modify(fileno, socket_info.event_mask)
+
+                        self._info.socket_recv_count -= 1
                     else:
-                        raise Exception(f'Unexpected syscall {task_info.yield_func}.')
+                        # Unbind task and socket.
+                        task_info.recv_fileno = None
+                        socket_info.recv_task_info = None
+
+                        if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
+                            # Accept as many connections as possible.
+                            sock, nursery, handler_factory = task_info.yield_args
+
+                            try:
+                                while True:
+                                    client_socket, client_address = sock.accept()
+                                    handler = handler_factory(socket(sock=client_socket), client_address)
+                                    self._info.task_enqueue_new(handler, task_info, nursery)
+                            except OSError:
+                                pass
+
+                            self._info.task_enqueue_old(task_info)
+
+                            del handler
+                            del client_address
+                            del client_socket
+                            del handler_factory
+                            del nursery
+                            del sock
+                        elif task_info.yield_func == SYSCALL_SOCKET_RECV:
+                            # Receive data.
+                            sock, size = task_info.yield_args
+                            data = sock.recv(size)
+                            # Enqueue task.
+                            task_info.send_args = data
+                            self._info.task_enqueue_old(task_info)
+
+                            del data
+                            del size
+                            del sock
+                        elif task_info.yield_func == SYSCALL_SOCKET_RECV_INTO:
+                            # Receive data.
+                            sock, data, size = task_info.yield_args
+                            size = sock.recv_into(data, size)
+                            # Enqueue task.
+                            task_info.send_args = size
+                            self._info.task_enqueue_old(task_info)
+
+                            del data
+                            del size
+                            del sock
+                        elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM:
+                            # Receive data.
+                            sock, size = task_info.yield_args
+                            data, addr = sock.recvfrom(size)
+                            # Enqueue task.
+                            task_info.send_args = data, addr
+                            self._info.task_enqueue_old(task_info)
+
+                            del addr
+                            del data
+                            del size
+                            del sock
+                        elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM_INTO:
+                            # Receive data.
+                            sock, data, size = task_info.yield_args
+                            size, addr = sock.recvfrom_into(data, size)
+                            # Enqueue task.
+                            task_info.send_args = size, addr
+                            self._info.task_enqueue_old(task_info)
+
+                            del addr
+                            del size
+                            del data
+                            del sock
+                        else:
+                            raise Exception(f'Unexpected syscall {task_info.yield_func}.')
+
+                if (event & 0x_0004) == 0x_0004: # EPOLLOUT
+                    # Socket is writable.
+                    task_info = socket_info.send_task_info
+
+                    if task_info is None:
+                        # No task awaits for socket to become writable.
+                        # Mark as writable.
+                        socket_info.send_ready = True
+
+                        # Note that socket may be registered for reading notification.
+                        socket_info.event_mask &= 0x_FFFB # ~0x_0004 EPOLLOUT
+
+                        if socket_info.event_mask == 0:
+                            self._info.socket_epoll.unregister(fileno)
+                        else:
+                            self._info.socket_epoll.modify(fileno, socket_info.event_mask)
+
+                        self._info.socket_send_count -= 1
+                    else:
+                        # Unbind task and socket.
+                        task_info.send_fileno = None
+                        socket_info.send_task_info = None
+
+                        if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
+                            # Close socket.
+                            # Is socket registered for reading notification?
+                            if socket_info.event_mask & 0x_0001 == 0x_0001: # EPOLLIN
+                                self._info.socket_recv_count -= 1
+
+                            # Is socket registered for writing notification?
+                            if socket_info.event_mask & 0x_0004 == 0x_0004: # EPOLLOUT
+                                self._info.socket_send_count -= 1
+
+                            self._info.socket_epoll.unregister(fileno)
+
+                            sock = task_info.yield_args[0]
+
+                            # Close socket and reset socket info.
+                            sock.close()
+                            socket_info.recv_task_info = None
+                            socket_info.recv_ready = False
+                            socket_info.send_ready = False
+                            socket_info.event_mask = 0
+
+                            del sock
+                        elif task_info.yield_func == SYSCALL_SOCKET_CONNECT:
+                            # Connect.
+                            sock, addr = task_info.yield_args
+                            # Connection complete.
+                            self._info.task_enqueue_old(task_info)
+
+                            del addr
+                            del sock
+                        elif task_info.yield_func == SYSCALL_SOCKET_SEND:
+                            # Send data.
+                            sock, data = task_info.yield_args
+                            size = sock.send(data)
+                            # Enqueue task.
+                            task_info.send_args = size
+                            self._info.task_enqueue_old(task_info)
+
+                            del data
+                            del size
+                        elif task_info.yield_func == SYSCALL_SOCKET_SENDTO:
+                            # Send data.
+                            sock, data, addr = task_info.yield_args
+                            size = sock.sendto(data, addr)
+                            # Enqueue task.
+                            task_info.send_args = size
+                            self._info.task_enqueue_old(task_info)
+
+                            del size
+                            del addr
+                            del data
+                            del sock
+                        elif task_info.yield_func == SYSCALL_SOCKET_SHUTDOWN:
+                            # TODO: SYSCALL_SOCKET_SHUTDOWN is not implemented yet.
+                            pass
+                        else:
+                            raise Exception(f'Unexpected syscall {task_info.yield_func}.')
+            del socket_info
 
         return True
 

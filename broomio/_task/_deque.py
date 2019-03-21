@@ -28,7 +28,6 @@ SYSCALL_SOCKET_READ  = set([
 
 SYSCALL_SOCKET_WRITE = set([
     SYSCALL_SOCKET_CLOSE,
-    SYSCALL_SOCKET_CONNECT,
     SYSCALL_SOCKET_SEND,
     SYSCALL_SOCKET_SENDTO,
     SYSCALL_SOCKET_SHUTDOWN])
@@ -215,11 +214,11 @@ class LoopTaskDeque(object):
                             task_info.recv_fileno = fileno
 
                             # Is socket registered for reading notification?
-                            if socket_info.event_mask & 0x_0001 == 0:
+                            if socket_info.event_mask & 0x_0001 == 0: # EPOLLIN
                                 # Note that socket may be registered for writing notification.
-                                socket_info.event_mask |= 0x_0001
+                                socket_info.event_mask |= 0x_2019 # EPOLLRDHUP | EPOLLHUP | EPOLLERR | EPOLLIN
 
-                                if socket_info.event_mask == 0x_0001:
+                                if socket_info.event_mask & 0x_0004 == 0: # EPOLLOUT
                                     self._info.socket_epoll.register(fileno, socket_info.event_mask)
                                 else:
                                     self._info.socket_epoll.modify(fileno, socket_info.event_mask)
@@ -248,11 +247,11 @@ class LoopTaskDeque(object):
                             if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
                                 # Close socket.
                                 # Is socket registered for reading notification?
-                                if socket_info.event_mask & 0x_0001 == 0x_0001:
+                                if socket_info.event_mask & 0x_0001 == 0x_0001: # EPOLLIN
                                     self._info.socket_recv_count -= 1
 
                                 # Is socket registered for writing notification?
-                                if socket_info.event_mask & 0x_0004 == 0x_0004:
+                                if socket_info.event_mask & 0x_0004 == 0x_0004: # EPOLLOUT
                                     self._info.socket_send_count -= 1
 
                                 self._info.socket_epoll.unregister(fileno)
@@ -300,11 +299,11 @@ class LoopTaskDeque(object):
                             task_info.send_fileno = fileno
 
                             # Is socket registered for writing notification?
-                            if socket_info.event_mask & 0x_0004 == 0:
+                            if socket_info.event_mask & 0x_0004 == 0: # EPOLLOUT
                                 # Note that socket may be registered for reading notification.
-                                socket_info.event_mask |= 0x_0004
+                                socket_info.event_mask |= 0x_201C # EPOLLRDHUP | EPOLLHUP | EPOLLERR | EPOLLOUT
 
-                                if socket_info.event_mask == 0x_0004:
+                                if socket_info.event_mask & 0x_0001 == 0: # EPOLLIN
                                     self._info.socket_epoll.register(fileno, socket_info.event_mask)
                                 else:
                                     self._info.socket_epoll.modify(fileno, socket_info.event_mask)
@@ -313,6 +312,38 @@ class LoopTaskDeque(object):
 
                         del socket_info
                         del fileno
+                        del sock
+                    elif task_info.yield_func == SYSCALL_SOCKET_CONNECT:
+                        # Connect.
+                        sock, addr = task_info.yield_args
+                        fileno = sock.fileno()
+                        socket_info = self._info.get_sock_info(fileno)
+
+                        assert socket_info.send_task_info is None, f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
+                        assert task_info.recv_fileno is None, 'Task is already waiting for another socket to become readable.'
+                        assert task_info.send_fileno is None, 'Task is already waiting for another socket to become writable.'
+
+                        # Bind task and socket.
+                        socket_info.send_task_info = task_info
+                        task_info.send_fileno = fileno
+
+                        # Is socket registered for writing notification?
+                        if socket_info.event_mask & 0x_0004 == 0: # EPOLLOUT
+                            # Note that socket may be registered for reading notification.
+                            socket_info.event_mask |= 0x_201D # EPOLLRDHUP | EPOLLHUP | EPOLLERR | EPOLLIN | EPOLLOUT
+
+                            self._info.socket_epoll.register(fileno, socket_info.event_mask)
+                            self._info.socket_recv_count += 1
+                            self._info.socket_send_count += 1
+
+                        try:
+                            sock.connect(addr)
+                        except BlockingIOError:
+                            pass
+
+                        del socket_info
+                        del fileno
+                        del addr
                         del sock
                     else:
                         assert False, f'Unexpected syscall {task_info.yield_func}.'
@@ -346,7 +377,8 @@ class LoopTaskDeque(object):
                         self._info.task_deque.append(watcher)
 
                 del nursery
-            except Exception:
+            except Exception as e:
+                print(e)
                 # Task failed, exception thrown.
                 # Remove child task from nursery.
                 nursery = task_info.nursery
@@ -381,7 +413,7 @@ class LoopTaskDeque(object):
                             socket_info.recv_task_info = None
 
                             # Note that socket may be registered for writing notification.
-                            socket_info.event_mask &= 0x_FFFE # ~0x_0001
+                            socket_info.event_mask &= 0x_FFFE # ~0x_0001 EPOLLIN
 
                             if socket_info.event_mask == 0:
                                 self._info.socket_epoll.unregister(child.recv_fileno)
@@ -405,7 +437,7 @@ class LoopTaskDeque(object):
                             socket_info.send_task_info = None
 
                             # Note that socket may be registered for reading notification.
-                            socket_info.event_mask &= 0x_FFFB # ~0x_0004
+                            socket_info.event_mask &= 0x_FFFB # ~0x_0004 EPOLLOUT
 
                             if socket_info.event_mask == 0:
                                 self._info.socket_epoll.unregister(child.send_fileno)

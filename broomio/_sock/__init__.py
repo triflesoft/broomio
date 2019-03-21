@@ -12,12 +12,21 @@ from socket import AF_INET
 from socket import AF_INET6
 from socket import IPPROTO_TCP
 from socket import IPPROTO_UDP
+from socket import SO_ERROR
 from socket import SO_REUSEADDR
 from socket import SO_REUSEPORT
 from socket import SOCK_DGRAM
 from socket import SOCK_STREAM
 from socket import SOL_SOCKET
+from os import strerror
 from types import coroutine
+
+
+def _get_socket_exception(socket):
+    code = socket.getsockopt(SOL_SOCKET, SO_ERROR)
+    text = strerror(code)
+
+    return OSError(code, text)
 
 
 _SOCKET_KINDS = {
@@ -36,7 +45,7 @@ class socket(object):
 
         if sock is None:
             self._socket = _socket(kind[0], kind[1], kind[2])
-            self._socket.setblocking(0)
+            self._socket.setblocking(False)
         else:
             self._socket = sock
 
@@ -54,6 +63,12 @@ class socket(object):
 
     reuse_addr = property(__get_reuse_addr, __set_reuse_addr)
     reuse_port = property(__get_reuse_port, __set_reuse_port)
+
+    def getpeername(self):
+        return self._socket.getpeername()
+
+    def getsockname(self):
+        return self._socket.getsockname()
 
     def bind(self, addr):
         self._socket.bind(addr)
