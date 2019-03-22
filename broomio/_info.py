@@ -1,9 +1,3 @@
-from collections import deque
-from resource import getrlimit
-from resource import RLIMIT_NOFILE
-from select import epoll
-
-
 #
 # Task information.
 #
@@ -69,6 +63,23 @@ class _SocketInfo(object):
         # Event mask of currently awaited events.
         self.event_mask = 0
 
+
+class _SelectFakePoll(object):
+    def __init__(self):
+        pass
+
+    def register(self, fd, eventmask):
+        pass
+
+    def modify(self, fd, eventmask):
+        pass
+
+    def unregister(self, fd):
+        pass
+
+    def poll(self, timeout):
+        pass
+
 #
 # Loop intofmation
 #
@@ -79,6 +90,10 @@ class _LoopInfo(object):
         'sock_array', 'sock_dict', 'get_sock_info', 'socket_recv_count', 'socket_send_count', 'socket_epoll'
 
     def __init__(self, task_nursery):
+        from collections import deque
+        from resource import getrlimit
+        from resource import RLIMIT_NOFILE
+
         _, nofile_hard = getrlimit(RLIMIT_NOFILE)
 
         # Deque with tasks ready to be executed.
@@ -129,7 +144,18 @@ class _LoopInfo(object):
         # Linux specific for now.
         # TODO: Support poll.
         # TODO: Support select.
-        self.socket_epoll = epoll(1024)
+
+        try:
+            from select import poll
+
+            self.socket_epoll = poll(1024)
+        except ModuleNotFoundError:
+            try:
+                from select import poll
+
+                self.socket_epoll = poll()
+            except ModuleNotFoundError:
+                self.socket_epoll = _SelectFakePoll()
 
     def task_enqueue_new(self, coro, parent_task_info, stack_frames, nursery):
         child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, nursery)
