@@ -97,12 +97,24 @@ class LoopSockEpoll(object):
                         if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
                             # Accept as many connections as possible.
                             sock, nursery, handler_factory = task_info.yield_args
+                            # Extract parent coroutine call chain frames.
+                            stack_frames = []
+                            frame_coro = task_info.coro
+
+                            while True:
+                                cr_frame = getattr(frame_coro, 'cr_frame', None)
+
+                                if not cr_frame:
+                                    break
+
+                                stack_frames.append(cr_frame)
+                                frame_coro = getattr(frame_coro, 'cr_await', None)
 
                             try:
                                 while True:
                                     client_socket, client_address = sock.accept()
                                     handler = handler_factory(socket(sock=client_socket), client_address)
-                                    self._info.task_enqueue_new(handler, task_info, nursery)
+                                    self._info.task_enqueue_new(handler, task_info, stack_frames, nursery)
                             except OSError:
                                 pass
 
