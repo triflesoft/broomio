@@ -19,7 +19,7 @@ class TestSleep(TestCase):
 
             async with Nursery() as nursery:
                 await nursery.start_soon(child(vars, 1))
-                await nursery.start_after(child(vars, 2), 1)
+                await nursery.start_later(child(vars, 2), 1)
 
             vars['parent_till'] = time()
 
@@ -61,7 +61,7 @@ class TestSleep(TestCase):
 
                 async with Nursery() as nursery:
                     await nursery.start_soon(child1(vars, 1))
-                    await nursery.start_after(child2(vars, 2), 1)
+                    await nursery.start_later(child2(vars, 2), 1)
                 pass
             finally:
                 vars['parent_till'] = time()

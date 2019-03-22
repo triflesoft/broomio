@@ -51,13 +51,13 @@ class LoopSockEpoll(object):
                 # Enqueue throwing exception.
                 if socket_info.send_task_info:
                     socket_info.send_task_info.send_fileno = None
-                    socket_info.send_task_info.throw_args = (exception, )
+                    socket_info.send_task_info.throw_exc = exception
                     self._info.task_enqueue_old(socket_info.send_task_info)
 
                 # Enqueue throwing exception.
                 if socket_info.recv_task_info:
                     socket_info.recv_task_info.recv_fileno = None
-                    socket_info.recv_task_info.throw_args = (exception, )
+                    socket_info.recv_task_info.throw_exc = exception
                     self._info.task_enqueue_old(socket_info.send_task_info)
 
                 # Close socket and reset socket info.

@@ -6,6 +6,7 @@ from ._task import Nursery
 from ._task._deque import LoopTaskDeque
 from ._time import sleep
 from ._time._heapq import LoopTimeHeapQ
+from sys import _getframe
 from time import time
 from traceback import print_exc
 
@@ -21,7 +22,17 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         # Create task info for root task. Root tasks have no parent.
         # Root tasks can be created after loop was started from \
         # another thread, but that does not look like great idea.
-        task_info = _TaskInfo(coro, None, self._info.task_nursery)
+        stack_frames = []
+
+        # Extract method call chain frames.
+        # Skip one stack frame corresponding to Loop.start_soon method.
+        for frame_index in range(1, 256):
+            try:
+                stack_frames.append(_getframe(frame_index))
+            except ValueError:
+                break
+
+        task_info = _TaskInfo(coro, None, reversed(stack_frames), self._info.task_nursery)
         # Don't forget to add task to root nursery.
         self._info.task_nursery._children.add(task_info)
         # And also enqueue task.

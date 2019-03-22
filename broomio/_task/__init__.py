@@ -1,11 +1,15 @@
 from .._syscalls import SYSCALL_NURSERY_JOIN
 from .._syscalls import SYSCALL_NURSERY_KILL
-from .._syscalls import SYSCALL_NURSERY_START_AFTER
+from .._syscalls import SYSCALL_NURSERY_START_LATER
 from .._syscalls import SYSCALL_NURSERY_START_SOON
 from types import coroutine
 
 
 class Nursery(object):
+    # TODO: exception handling policy
+    # 1 - report ASAP, cancel all children
+    # 2 - report when all children completed
+    # 3 - completely ignore childrene exceptions
     def __init__(self):
         self._children = set()
         self._watchers = set()
@@ -29,5 +33,5 @@ class Nursery(object):
         return (yield SYSCALL_NURSERY_START_SOON, self, coro)
 
     @coroutine
-    def start_after(self, coro, delay):
-        return (yield SYSCALL_NURSERY_START_AFTER, self, coro, delay)
+    def start_later(self, coro, delay):
+        return (yield SYSCALL_NURSERY_START_LATER, self, coro, delay)

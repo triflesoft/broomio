@@ -8,9 +8,15 @@ from select import epoll
 # Task information.
 #
 class _TaskInfo(object):
-    __slots__ = 'coro', 'yield_func', 'yield_args', 'send_args', 'throw_args', 'parent_task_info', 'recv_fileno', 'send_fileno', 'nursery'
+    __slots__ = \
+        'coro', \
+        'yield_func', 'yield_args', \
+        'send_args', 'throw_exc', \
+        'parent_task_info', 'stack_frames', \
+        'recv_fileno', 'send_fileno', \
+        'nursery'
 
-    def __init__(self, coro, parent_task_info, nursery):
+    def __init__(self, coro, parent_task_info, stack_frames, nursery):
         # Coroutine to be executed.
         self.coro = coro
         # Syscall function coroutine requested.
@@ -20,9 +26,11 @@ class _TaskInfo(object):
         # Result of last syscall to be passed to coroutine.
         self.send_args = None
         # Exception to be passed to coroutine.
-        self.throw_args = None
-        # Parent task, the one from which nursery.start_soon nursery.start_after was called.
+        self.throw_exc = None
+        # Parent task, the one from which nursery.start_soon nursery.start_later was called.
         self.parent_task_info = parent_task_info
+        # Stack frames.
+        self.stack_frames = stack_frames
         # Socket descriptor for which task is waiting to become readable.
         # Only one of recv_fileno and send_fileno may be set.
         self.recv_fileno = None
@@ -37,7 +45,11 @@ class _TaskInfo(object):
 # Socket information.
 #
 class _SocketInfo(object):
-    __slots__ = 'fileno', 'recv_task_info', 'send_task_info', 'recv_ready', 'send_ready', 'event_mask'
+    __slots__ = \
+        'fileno', \
+        'recv_task_info', 'send_task_info', \
+        'recv_ready', 'send_ready', \
+        'event_mask'
 
     def __init__(self, fileno):
         # Socket descriptor.
@@ -119,7 +131,7 @@ class _LoopInfo(object):
         # TODO: Support select.
         self.socket_epoll = epoll(1024)
 
-    def task_enqueue_new(self, coro, parent_task_info, nursery):
-        child_task_info = _TaskInfo(coro, parent_task_info, nursery)
+    def task_enqueue_new(self, coro, parent_task_info, stack_frames, nursery):
+        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, nursery)
         self.task_deque.append(child_task_info)
 

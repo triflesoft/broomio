@@ -2,7 +2,7 @@ from .._info import _TaskInfo
 from .._sock import socket
 from .._syscalls import SYSCALL_NURSERY_JOIN
 from .._syscalls import SYSCALL_NURSERY_KILL
-from .._syscalls import SYSCALL_NURSERY_START_AFTER
+from .._syscalls import SYSCALL_NURSERY_START_LATER
 from .._syscalls import SYSCALL_NURSERY_START_SOON
 from .._syscalls import SYSCALL_SOCKET_ACCEPT
 from .._syscalls import SYSCALL_SOCKET_CLOSE
@@ -17,6 +17,7 @@ from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
 from .._syscalls import SYSCALL_TASK_SLEEP
 from heapq import heapify
 from heapq import heappush
+from types import TracebackType
 
 
 SYSCALL_SOCKET_READ  = set([
@@ -46,8 +47,26 @@ class LoopTaskDeque(object):
 
             try:
                 # Should we throw an exception?
-                if not task_info.throw_args is None:
-                    task_info.coro.throw(*task_info.throw_args)
+                if not task_info.throw_exc is None:
+                    # Go through parent task linked list and build call chain
+                    frame_task_infos = []
+                    frame_task_info = task_info
+
+                    while not frame_task_info is None:
+                        frame_task_infos.append(frame_task_info)
+                        frame_task_info = frame_task_info.parent_task_info
+
+                    frame_task_infos = reversed(frame_task_infos)
+
+                    # Create beautiful traceback object
+                    prev_traceback = None
+
+                    for frame_task_info in frame_task_infos:
+                        for stack_frame in frame_task_info.stack_frames:
+                            prev_traceback = TracebackType(prev_traceback, stack_frame, stack_frame.f_lasti, stack_frame.f_lineno)
+
+                    # Throw exception
+                    task_info.coro.throw(type(task_info.throw_exc), task_info.throw_exc, prev_traceback)
                 else:
                     # Execute task.
                     task_info.yield_func, *task_info.yield_args = task_info.coro.send(task_info.send_args)
@@ -85,8 +104,21 @@ class LoopTaskDeque(object):
                     elif task_info.yield_func == SYSCALL_NURSERY_START_SOON:
                         # Enqueue task for execution in current tick.
                         nursery, coro = task_info.yield_args
+                        # Extract parent coroutine call chain frames.
+                        stack_frames = []
+                        frame_coro = task_info.coro
+
+                        while True:
+                            cr_frame = getattr(frame_coro, 'cr_frame', None)
+
+                            if not cr_frame:
+                                break
+
+                            stack_frames.append(cr_frame)
+                            frame_coro = getattr(frame_coro, 'cr_await', None)
+
                         # Create task info for a new child task. Current task will be parent.
-                        child_task_info = _TaskInfo(coro, task_info, nursery)
+                        child_task_info = _TaskInfo(coro, task_info, stack_frames, nursery)
                         # Don't forget to add task to nursery.
                         nursery._children.add(child_task_info)
                         # Enqueue current (parent) task.
@@ -97,12 +129,25 @@ class LoopTaskDeque(object):
                         del child_task_info
                         del coro
                         del nursery
-                    elif task_info.yield_func == SYSCALL_NURSERY_START_AFTER:
+                    elif task_info.yield_func == SYSCALL_NURSERY_START_LATER:
                         # Enqueue task for execution after delay.
                         nursery, coro, delay = task_info.yield_args
                         delay = float(delay)
+                        # Extract parent coroutine call chain frames.
+                        stack_frames = []
+                        frame_coro = task_info.coro
+
+                        while True:
+                            cr_frame = getattr(frame_coro, 'cr_frame', None)
+
+                            if not cr_frame:
+                                break
+
+                            stack_frames.append(cr_frame)
+                            frame_coro = getattr(frame_coro, 'cr_await', None)
+
                         # Create task info for a new child task. Current task will be parent.
-                        child_task_info = _TaskInfo(coro, task_info, nursery)
+                        child_task_info = _TaskInfo(coro, task_info, stack_frames, nursery)
                         # Don't forget to add task to nursery.
                         nursery._children.add(child_task_info)
                         # Enqueue current (parent) task.
@@ -116,6 +161,9 @@ class LoopTaskDeque(object):
                             # Otherwise enqueue child task to be executed in current tick.
                             self._info.task_deque.append(child_task_info)
 
+                        del cr_frame
+                        del frame_coro
+                        del stack_frames
                         del child_task_info
                         del delay
                         del coro
@@ -145,7 +193,7 @@ class LoopTaskDeque(object):
                                     while True:
                                         client_socket, client_address = sock.accept()
                                         handler = handler_factory(socket(sock=client_socket), client_address)
-                                        handler_task_info = _TaskInfo(handler, task_info, nursery)
+                                        handler_task_info = _TaskInfo(handler, task_info, [task_info.coro.cr_frame], nursery)
                                         self._info.task_deque.append(handler_task_info)
                                 except OSError:
                                     pass
@@ -400,7 +448,7 @@ class LoopTaskDeque(object):
                     for child in nursery._children:
                         # Throw exception in task.
                         # TODO: Is this the best exception type to throw inside coroutine to cancel it?
-                        child.throw_args = (GeneratorExit(None), )
+                        child.throw_exc = GeneratorExit(None)
 
                         if not child.recv_fileno is None:
                             # This task is waiting for socket to become readable.
