@@ -142,6 +142,7 @@ class LoopTaskDeque(object):
                             # Unbind task and socket.
                             child.recv_fileno = None
                             socket_info.recv_task_info = None
+                            self._info.socket_task_count -= 1
 
                             # Note that socket may be registered for writing notification.
                             socket_info.event_mask &= 0x_FFFE # ~0x_0001 EPOLLIN
@@ -166,6 +167,7 @@ class LoopTaskDeque(object):
                             # Unbind task and socket.
                             child.send_fileno = None
                             socket_info.send_task_info = None
+                            self._info.socket_task_count -= 1
 
                             # Note that socket may be registered for reading notification.
                             socket_info.event_mask &= 0x_FFFB # ~0x_0004 EPOLLOUT
@@ -311,14 +313,30 @@ class LoopTaskDeque(object):
                         assert socket_info.recv_task_info is None, 'Internal data structures are damaged.'
 
                         if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
+                            assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, 'Internal data structures are damaged.'
                             # Accept as many connections as possible.
                             _, nursery, handler_factory = task_info.yield_args
+                            # Extract parent coroutine call chain frames.
+                            stack_frames = []
+                            frame_coro = task_info.coro
+
+                            while True:
+                                cr_frame = getattr(frame_coro, 'cr_frame', None)
+
+                                if not cr_frame:
+                                    break
+
+                                stack_frames.append(cr_frame)
+                                frame_coro = getattr(frame_coro, 'cr_await', None)
 
                             try:
                                 while True:
                                     client_socket, client_address = sock.accept()
+                                    client_socket_info = self._info.sock_array[client_socket.fileno()]
+                                    assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, 'Internal data structures are damaged.'
+                                    client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
                                     handler = handler_factory(socket(sock=client_socket), client_address)
-                                    self._info.task_enqueue_new(handler, task_info, [task_info.coro.cr_frame], nursery)
+                                    self._info.task_enqueue_new(handler, task_info, stack_frames, nursery)
                             except OSError:
                                 pass
 
@@ -383,6 +401,7 @@ class LoopTaskDeque(object):
                         # Bind task and socket.
                         socket_info.recv_task_info = task_info
                         task_info.recv_fileno = fileno
+                        self._info.socket_task_count += 1
 
                         # Is socket registered for reading notification?
                         if socket_info.event_mask & 0x_0001 == 0: # EPOLLIN
@@ -429,16 +448,17 @@ class LoopTaskDeque(object):
 
                             # Close socket and reset socket info.
                             sock.close()
-                            socket_info.recv_task_info = None
+                            socket_info.kind = SOCKET_KIND_UNKNOWN
+
+                            if socket_info.recv_task_info:
+                                socket_info.recv_task_info = None
+                                self._info.socket_task_count -= 1
+
                             socket_info.recv_ready = False
                             socket_info.send_ready = False
                             socket_info.event_mask = 0
-                            socket_info.kind = SOCKET_KIND_UNKNOWN
 
                             self._info.task_enqueue_old(task_info)
-                        elif task_info.yield_func == SYSCALL_SOCKET_CONNECT:
-                            # TODO: SYSCALL_SOCKET_CONNECT is not implemented yet.
-                            pass
                         elif task_info.yield_func == SYSCALL_SOCKET_SEND:
                             # Send data.
                             sock, data = task_info.yield_args
@@ -481,11 +501,17 @@ class LoopTaskDeque(object):
 
                             # Close socket and reset socket info.
                             sock.close()
-                            socket_info.recv_task_info = None
+                            socket_info.kind = SOCKET_KIND_UNKNOWN
+                            socket_info.send_task_info = None
+                            self._info.socket_task_count -= 1
+
+                            if socket_info.recv_task_info:
+                                socket_info.recv_task_info = None
+                                self._info.socket_task_count -= 1
+
                             socket_info.recv_ready = False
                             socket_info.send_ready = False
                             socket_info.event_mask = 0
-                            socket_info.kind = SOCKET_KIND_UNKNOWN
 
                             self._info.task_enqueue_old(task_info)
                         else:
@@ -493,6 +519,7 @@ class LoopTaskDeque(object):
                             # Bind task and socket.
                             socket_info.send_task_info = task_info
                             task_info.send_fileno = fileno
+                            self._info.socket_task_count += 1
 
                             # Is socket registered for writing notification?
                             if socket_info.event_mask & 0x_0004 == 0: # EPOLLOUT
@@ -522,6 +549,7 @@ class LoopTaskDeque(object):
                     # Bind task and socket.
                     socket_info.send_task_info = task_info
                     task_info.send_fileno = fileno
+                    self._info.socket_task_count += 1
 
                     # Is socket registered for writing notification?
                     if socket_info.event_mask & 0x_0004 == 0: # EPOLLOUT
