@@ -50,6 +50,7 @@ class _SocketInfo(object):
     __slots__ = \
         'fileno', \
         'kind', \
+        'frame', \
         'recv_task_info', 'send_task_info', \
         'recv_ready', 'send_ready', \
         'event_mask'
@@ -57,11 +58,7 @@ class _SocketInfo(object):
     def __init__(self, fileno):
         # Socket descriptor.
         self.fileno = fileno
-        # Socket Type.
-        # 0x_00 - Unknown
-        # 0x_11 - Server, listening
-        # 0x_12 - Server, connection
-        # 0x_22 - Client, connection
+        # Socket kind.
         self.kind = SOCKET_KIND_UNKNOWN
         # Task which waits for socket to become readable.
         # Does not necessary mean task wants to call recv* family function.
@@ -102,7 +99,7 @@ class _LoopInfo(object):
     __slots__ = \
         'task_deque', 'task_enqueue_old', 'task_nursery', \
         'time_heapq', 'now', \
-        'sock_array', 'sock_dict', 'get_sock_info', 'socket_wait_count', 'socket_task_count', 'socket_epoll'
+        'sock_array', 'get_sock_info', 'socket_wait_count', 'socket_task_count', 'socket_epoll'
 
     def __init__(self, task_nursery, queue_is_right, technology=None):
         from collections import deque
