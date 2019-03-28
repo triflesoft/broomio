@@ -39,26 +39,23 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
 
         while running:
             # Each loop iteration is a tick.
-            try:
-                # Current time as reference for timers.
-                self._info.now = time()
+            # Current time as reference for timers.
+            self._info.now = time()
 
-                # SPEED: Testing if collection is empty before calling method is much faster.
-                # SPEED: If collection is empty, method is not called.
+            # SPEED: Testing if collection is empty before calling method is much faster.
+            # SPEED: If collection is empty, method is not called.
 
-                # Are there tasks ready for execution?
-                if len(self._info.task_deque) > 0:
-                    self._process_task()
-                # Are there task which are scheduled to run later?
-                elif len(self._info.time_heapq) > 0:
-                    self._process_time()
-                # Are there sockets to check for readiness?
-                elif self._info.socket_wait_count > 0:
-                    self._process_sock()
-                else:
-                    # Nothing to do, stop loop.
-                    running = False
-            except Exception:
-                print_exc()
+            # Are there tasks ready for execution?
+            if len(self._info.task_deque) > 0:
+                self._process_task()
+            # Are there task which are scheduled to run later?
+            elif len(self._info.time_heapq) > 0:
+                self._process_time()
+            # Are there sockets to check for readiness?
+            elif self._info.socket_wait_count > 0:
+                self._process_sock()
+            else:
+                # Nothing to do, stop loop.
+                running = False
 
 
