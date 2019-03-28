@@ -20,6 +20,16 @@ class LoopSockEpoll(object):
         self._info = None
 
     def _process_sock(self):
+        if self._info.socket_task_count == 0:
+            # There are unclosed sockets.
+            # Use the following code to debug
+            #
+            # import tracemalloc
+            #
+            # tracemalloc.start(10)
+
+            raise RuntimeWarning('Unclosed sockets with no tasks awaiting them detected. Enable tracemalloc to get the socket allocation traceback.')
+
         # If any tasks are scheduled to be run later, do not make them late.
         # Otherwise wait for 5 second.
         # TODO: Justify timeout value, currently 5 seconds.
@@ -56,22 +66,23 @@ class LoopSockEpoll(object):
                     socket_info.send_task_info.send_fileno = None
                     socket_info.send_task_info.throw_exc = exception
                     self._info.task_enqueue_old(socket_info.send_task_info)
+                    socket_info.send_task_info = None
+                    self._info.socket_task_count -= 1
 
                 # Enqueue throwing exception.
                 if socket_info.recv_task_info:
                     socket_info.recv_task_info.recv_fileno = None
                     socket_info.recv_task_info.throw_exc = exception
                     self._info.task_enqueue_old(socket_info.send_task_info)
+                    socket_info.recv_task_info = None
+                    self._info.socket_task_count -= 1
 
                 # Close socket and reset socket info.
                 sock.close()
-                socket_info.send_task_info = None
-                socket_info.recv_task_info = None
+                socket_info.kind = SOCKET_KIND_UNKNOWN
                 socket_info.recv_ready = False
                 socket_info.send_ready = False
                 socket_info.event_mask = 0
-                socket_info.kind = SOCKET_KIND_UNKNOWN
-                self._info.socket_task_count -= 2
 
                 del exception
                 del sock
@@ -230,11 +241,15 @@ class LoopSockEpoll(object):
 
                             # Close socket and reset socket info.
                             sock.close()
-                            socket_info.recv_task_info = None
+                            socket_info.kind = SOCKET_KIND_UNKNOWN
+
+                            if socket_info.recv_task_info:
+                                socket_info.recv_task_info = None
+                                self._info.socket_task_count -= 1
+
                             socket_info.recv_ready = False
                             socket_info.send_ready = False
                             socket_info.event_mask = 0
-                            socket_info.kind = SOCKET_KIND_UNKNOWN
 
                             self._info.task_enqueue_old(task_info)
 
