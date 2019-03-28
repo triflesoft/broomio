@@ -4,6 +4,7 @@ from .._info import SOCKET_KIND_CLIENT_CONNECTION
 from .._info import SOCKET_KIND_SERVER_CONNECTION
 from .._info import SOCKET_KIND_SERVER_LISTENING
 from .._info import SOCKET_KIND_UNKNOWN
+from .._util import _get_coro_stack_frames
 from .._syscalls import SYSCALL_SOCKET_ACCEPT
 from .._syscalls import SYSCALL_SOCKET_CLOSE
 from .._syscalls import SYSCALL_SOCKET_CONNECT
@@ -116,17 +117,7 @@ class LoopSockEpoll(object):
                             # Accept as many connections as possible.
                             sock, nursery, handler_factory = task_info.yield_args
                             # Extract parent coroutine call chain frames.
-                            stack_frames = []
-                            frame_coro = task_info.coro
-
-                            while True:
-                                cr_frame = getattr(frame_coro, 'cr_frame', None)
-
-                                if not cr_frame:
-                                    break
-
-                                stack_frames.append(cr_frame)
-                                frame_coro = getattr(frame_coro, 'cr_await', None)
+                            stack_frames = _get_coro_stack_frames(task_info.coro)
 
                             try:
                                 while True:

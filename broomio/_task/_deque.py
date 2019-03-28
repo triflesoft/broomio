@@ -3,6 +3,7 @@ from .._info import SOCKET_KIND_SERVER_CONNECTION
 from .._info import SOCKET_KIND_SERVER_LISTENING
 from .._info import SOCKET_KIND_UNKNOWN
 from .._sock import socket
+from .._util import _get_coro_stack_frames
 from .._syscalls import SYSCALL_NURSERY_JOIN
 from .._syscalls import SYSCALL_NURSERY_KILL
 from .._syscalls import SYSCALL_NURSERY_START_LATER
@@ -242,18 +243,7 @@ class LoopTaskDeque(object):
                     # Enqueue task for execution in current tick.
                     nursery, coro = task_info.yield_args
                     # Extract parent coroutine call chain frames.
-                    stack_frames = []
-                    frame_coro = task_info.coro
-
-                    while True:
-                        cr_frame = getattr(frame_coro, 'cr_frame', None)
-
-                        if not cr_frame:
-                            break
-
-                        stack_frames.append(cr_frame)
-                        frame_coro = getattr(frame_coro, 'cr_await', None)
-
+                    stack_frames = _get_coro_stack_frames(task_info.coro)
                     # Enqueue child task. Current task will be parent.
                     self._info.task_enqueue_new(coro, task_info, stack_frames, nursery)
                     # Enqueue current (parent) task.
@@ -266,17 +256,7 @@ class LoopTaskDeque(object):
                     nursery, coro, delay = task_info.yield_args
                     delay = float(delay)
                     # Extract parent coroutine call chain frames.
-                    stack_frames = []
-                    frame_coro = task_info.coro
-
-                    while True:
-                        cr_frame = getattr(frame_coro, 'cr_frame', None)
-
-                        if not cr_frame:
-                            break
-
-                        stack_frames.append(cr_frame)
-                        frame_coro = getattr(frame_coro, 'cr_await', None)
+                    stack_frames = _get_coro_stack_frames(task_info.coro)
 
                     # Is delay greater than zero?
                     if delay > 0:
@@ -289,8 +269,6 @@ class LoopTaskDeque(object):
                     # Enqueue current (parent) task.
                     self._info.task_enqueue_old(task_info)
 
-                    del cr_frame
-                    del frame_coro
                     del stack_frames
                     del delay
                     del coro
@@ -317,17 +295,7 @@ class LoopTaskDeque(object):
                             # Accept as many connections as possible.
                             _, nursery, handler_factory = task_info.yield_args
                             # Extract parent coroutine call chain frames.
-                            stack_frames = []
-                            frame_coro = task_info.coro
-
-                            while True:
-                                cr_frame = getattr(frame_coro, 'cr_frame', None)
-
-                                if not cr_frame:
-                                    break
-
-                                stack_frames.append(cr_frame)
-                                frame_coro = getattr(frame_coro, 'cr_await', None)
+                            stack_frames = _get_coro_stack_frames(task_info.coro)
 
                             try:
                                 while True:
