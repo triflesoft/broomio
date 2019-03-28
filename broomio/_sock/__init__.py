@@ -1,6 +1,7 @@
 from .._syscalls import SYSCALL_SOCKET_ACCEPT
 from .._syscalls import SYSCALL_SOCKET_CLOSE
 from .._syscalls import SYSCALL_SOCKET_CONNECT
+from .._syscalls import SYSCALL_SOCKET_LISTEN
 from .._syscalls import SYSCALL_SOCKET_RECV
 from .._syscalls import SYSCALL_SOCKET_RECV_INTO
 from .._syscalls import SYSCALL_SOCKET_RECVFROM
@@ -87,7 +88,7 @@ class socket(object):
 
     @coroutine
     def listen(self, backlog):
-        self._socket.listen(backlog)
+        return (yield SYSCALL_SOCKET_LISTEN, self._socket, backlog)
 
     @coroutine
     def recv(self, size):

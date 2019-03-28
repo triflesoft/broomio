@@ -11,22 +11,17 @@ class LoopTimeHeapQ(object):
         moment, task_info = self._info.time_heapq[0]
 
         # Is task scheduled to run later?
-        if self._info.now >= moment:
-            # Do not wait too much, ler loop cycle.
-            timeout = moment - self._info.now
+        if self._info.now < moment:
+            # If there is any socket activity, better wait in epoll.
+            if self._info.socket_wait_count > 0:
+                return
 
-            if timeout > 0.01:
-                time_sleep(0.01)
-            else:
-                if timeout > 0:
-                    time_sleep(timeout)
+            time_sleep(moment - self._info.now)
 
-                # Run all tasks which are ready to run.
-                while (len(self._info.time_heapq) > 0) and (self._info.now >= self._info.time_heapq[0][0]):
-                    _, task_info = heappop(self._info.time_heapq)
-                    self._info.task_deque.append(task_info)
-
-            del timeout
+        # Run all tasks which are ready to run.
+        while (len(self._info.time_heapq) > 0) and (self._info.now >= self._info.time_heapq[0][0]):
+            _, task_info = heappop(self._info.time_heapq)
+            self._info.task_enqueue_old(task_info)
 
         del task_info
         del moment

@@ -1,5 +1,9 @@
-from . import socket
 from . import _get_socket_exception
+from . import socket
+from .._info import SOCKET_KIND_CLIENT_CONNECTION
+from .._info import SOCKET_KIND_SERVER_CONNECTION
+from .._info import SOCKET_KIND_SERVER_LISTENING
+from .._info import SOCKET_KIND_UNKNOWN
 from .._syscalls import SYSCALL_SOCKET_ACCEPT
 from .._syscalls import SYSCALL_SOCKET_CLOSE
 from .._syscalls import SYSCALL_SOCKET_CONNECT
@@ -10,7 +14,6 @@ from .._syscalls import SYSCALL_SOCKET_RECVFROM_INTO
 from .._syscalls import SYSCALL_SOCKET_SEND
 from .._syscalls import SYSCALL_SOCKET_SENDTO
 from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
-
 
 class LoopSockEpoll(object):
     def __init__(self):
@@ -31,11 +34,11 @@ class LoopSockEpoll(object):
                 # Close socket.
                 # Is socket registered for reading notification?
                 if socket_info.event_mask & 0x_0001 == 0x_0001: # EPOLLIN
-                    self._info.socket_recv_count -= 1
+                    self._info.socket_wait_count -= 1
 
                 # Is socket registered for writing notification?
                 if socket_info.event_mask & 0x_0004 == 0x_0004: # EPOLLOUT
-                    self._info.socket_send_count -= 1
+                    self._info.socket_wait_count -= 1
 
                 self._info.socket_epoll.unregister(fileno)
 
@@ -67,6 +70,8 @@ class LoopSockEpoll(object):
                 socket_info.recv_ready = False
                 socket_info.send_ready = False
                 socket_info.event_mask = 0
+                socket_info.kind = SOCKET_KIND_UNKNOWN
+                self._info.socket_task_count -= 2
 
                 del exception
                 del sock
@@ -88,13 +93,15 @@ class LoopSockEpoll(object):
                         else:
                             self._info.socket_epoll.modify(fileno, socket_info.event_mask)
 
-                        self._info.socket_recv_count -= 1
+                        self._info.socket_wait_count -= 1
                     else:
                         # Unbind task and socket.
                         task_info.recv_fileno = None
                         socket_info.recv_task_info = None
+                        self._info.socket_task_count -= 1
 
                         if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
+                            assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, 'Internal data structures are damaged.'
                             # Accept as many connections as possible.
                             sock, nursery, handler_factory = task_info.yield_args
                             # Extract parent coroutine call chain frames.
@@ -113,6 +120,9 @@ class LoopSockEpoll(object):
                             try:
                                 while True:
                                     client_socket, client_address = sock.accept()
+                                    client_socket_info = self._info.sock_array[client_socket.fileno()]
+                                    assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, 'Internal data structures are damaged.'
+                                    client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
                                     handler = handler_factory(socket(sock=client_socket), client_address)
                                     self._info.task_enqueue_new(handler, task_info, stack_frames, nursery)
                             except OSError:
@@ -121,12 +131,14 @@ class LoopSockEpoll(object):
                             self._info.task_enqueue_old(task_info)
 
                             del handler
+                            del client_socket_info
                             del client_address
                             del client_socket
                             del handler_factory
                             del nursery
                             del sock
                         elif task_info.yield_func == SYSCALL_SOCKET_RECV:
+                            assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
                             # Receive data.
                             sock, size = task_info.yield_args
                             data = sock.recv(size)
@@ -138,6 +150,7 @@ class LoopSockEpoll(object):
                             del size
                             del sock
                         elif task_info.yield_func == SYSCALL_SOCKET_RECV_INTO:
+                            assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
                             # Receive data.
                             sock, data, size = task_info.yield_args
                             size = sock.recv_into(data, size)
@@ -149,6 +162,7 @@ class LoopSockEpoll(object):
                             del size
                             del sock
                         elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM:
+                            assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
                             # Receive data.
                             sock, size = task_info.yield_args
                             data, addr = sock.recvfrom(size)
@@ -161,6 +175,7 @@ class LoopSockEpoll(object):
                             del size
                             del sock
                         elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM_INTO:
+                            assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
                             # Receive data.
                             sock, data, size = task_info.yield_args
                             size, addr = sock.recvfrom_into(data, size)
@@ -192,21 +207,22 @@ class LoopSockEpoll(object):
                         else:
                             self._info.socket_epoll.modify(fileno, socket_info.event_mask)
 
-                        self._info.socket_send_count -= 1
+                        self._info.socket_wait_count -= 1
                     else:
                         # Unbind task and socket.
                         task_info.send_fileno = None
                         socket_info.send_task_info = None
+                        self._info.socket_task_count -= 1
 
                         if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
                             # Close socket.
                             # Is socket registered for reading notification?
                             if socket_info.event_mask & 0x_0001 == 0x_0001: # EPOLLIN
-                                self._info.socket_recv_count -= 1
+                                self._info.socket_wait_count -= 1
 
                             # Is socket registered for writing notification?
                             if socket_info.event_mask & 0x_0004 == 0x_0004: # EPOLLOUT
-                                self._info.socket_send_count -= 1
+                                self._info.socket_wait_count -= 1
 
                             self._info.socket_epoll.unregister(fileno)
 
@@ -218,6 +234,9 @@ class LoopSockEpoll(object):
                             socket_info.recv_ready = False
                             socket_info.send_ready = False
                             socket_info.event_mask = 0
+                            socket_info.kind = SOCKET_KIND_UNKNOWN
+
+                            self._info.task_enqueue_old(task_info)
 
                             del sock
                         elif task_info.yield_func == SYSCALL_SOCKET_CONNECT:
@@ -226,9 +245,12 @@ class LoopSockEpoll(object):
                             # Connection complete.
                             self._info.task_enqueue_old(task_info)
 
+                            socket_info.kind = SOCKET_KIND_CLIENT_CONNECTION
+
                             del addr
                             del sock
                         elif task_info.yield_func == SYSCALL_SOCKET_SEND:
+                            assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
                             # Send data.
                             sock, data = task_info.yield_args
                             size = sock.send(data)
@@ -239,6 +261,7 @@ class LoopSockEpoll(object):
                             del data
                             del size
                         elif task_info.yield_func == SYSCALL_SOCKET_SENDTO:
+                            assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
                             # Send data.
                             sock, data, addr = task_info.yield_args
                             size = sock.sendto(data, addr)

@@ -1,3 +1,6 @@
+from heapq import heappush
+
+
 #
 # Task information.
 #
@@ -38,9 +41,15 @@ class _TaskInfo(object):
 #
 # Socket information.
 #
+SOCKET_KIND_UNKNOWN           = 0x_00
+SOCKET_KIND_SERVER_LISTENING  = 0x_11
+SOCKET_KIND_SERVER_CONNECTION = 0x_12
+SOCKET_KIND_CLIENT_CONNECTION = 0x_22
+
 class _SocketInfo(object):
     __slots__ = \
         'fileno', \
+        'kind', \
         'recv_task_info', 'send_task_info', \
         'recv_ready', 'send_ready', \
         'event_mask'
@@ -48,6 +57,12 @@ class _SocketInfo(object):
     def __init__(self, fileno):
         # Socket descriptor.
         self.fileno = fileno
+        # Socket Type.
+        # 0x_00 - Unknown
+        # 0x_11 - Server, listening
+        # 0x_12 - Server, connection
+        # 0x_22 - Client, connection
+        self.kind = SOCKET_KIND_UNKNOWN
         # Task which waits for socket to become readable.
         # Does not necessary mean task wants to call recv* family function.
         self.recv_task_info = None
@@ -64,9 +79,9 @@ class _SocketInfo(object):
         self.event_mask = 0
 
 
-class _SelectFakePoll(object):
+class _SelectFakeEPoll(object):
     def __init__(self):
-        pass
+        from select import select
 
     def register(self, fd, eventmask):
         pass
@@ -87,9 +102,9 @@ class _LoopInfo(object):
     __slots__ = \
         'task_deque', 'task_enqueue_old', 'task_nursery', \
         'time_heapq', 'now', \
-        'sock_array', 'sock_dict', 'get_sock_info', 'socket_recv_count', 'socket_send_count', 'socket_epoll'
+        'sock_array', 'sock_dict', 'get_sock_info', 'socket_wait_count', 'socket_task_count', 'socket_epoll'
 
-    def __init__(self, task_nursery):
+    def __init__(self, task_nursery, queue_is_right, technology=None):
         from collections import deque
         from resource import getrlimit
         from resource import RLIMIT_NOFILE
@@ -105,7 +120,9 @@ class _LoopInfo(object):
         # SPEED: def task_enqueue_old(self, task_info): # THIS IS SLOW
         # SPEED:     self.task_deque.append(task_info)  # THIS IS SLOW
         # SPEED:
-        self.task_enqueue_old = self.task_deque.append
+
+        # Also, task order is randomized by queue_is_right
+        self.task_enqueue_old = self.task_deque.append if queue_is_right else self.task_deque.appendleft
 
         # Root nursery.
         self.task_nursery = task_nursery
@@ -135,29 +152,50 @@ class _LoopInfo(object):
         # SPEED:
         self.get_sock_info = self.sock_array.__getitem__
 
-        # Number of sockets waiting to become readable.
-        self.socket_recv_count = 0
+        # Number of sockets waiting to become readable or writable.
+        # If socket is awaited to become readable and writable, it will be counted twice.
+        self.socket_wait_count = 0
 
-        # Number of sockets waiting to become writable.
-        self.socket_send_count = 0
+        # Number of task awaiting for sockets to become readable or writable.
+        self.socket_task_count = 0
 
-        # Linux specific for now.
-        # TODO: Support poll.
+        # Event polling is Linux specific for now.
         # TODO: Support select.
+        # TODO: Support IOCP.
+        # TODO: Support kqueue.
 
-        try:
-            from select import poll
+        if technology:
+            technologies = [technology, 'epoll', 'iocp', 'kqueue', 'poll', 'select']
+        else:
+            technologies = ['epoll', 'iocp', 'kqueue', 'poll']
 
-            self.socket_epoll = poll(1024)
-        except ModuleNotFoundError:
-            try:
-                from select import poll
+            for technology in technologies:
+                if technology == 'epoll':
+                    try:
+                        from select import epoll
 
-                self.socket_epoll = poll()
-            except ModuleNotFoundError:
-                self.socket_epoll = _SelectFakePoll()
+                        self.socket_epoll = epoll(1024)
+                        break
+                    except ModuleNotFoundError:
+                        pass
+                elif technology == 'poll':
+                    try:
+                        from select import poll
+
+                        self.socket_epoll = poll()
+                        break
+                    except ModuleNotFoundError:
+                        pass
+
+        if not self.socket_epoll:
+            self.socket_epoll = _SelectFakeEPoll()
 
     def task_enqueue_new(self, coro, parent_task_info, stack_frames, nursery):
         child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, nursery)
-        self.task_deque.append(child_task_info)
+        nursery._children.add(child_task_info)
+        self.task_enqueue_old(child_task_info)
 
+    def task_enqueue_new_delay(self, coro, parent_task_info, stack_frames, nursery, delay):
+        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, nursery)
+        nursery._children.add(child_task_info)
+        heappush(self.time_heapq, (self.now + delay, child_task_info))
