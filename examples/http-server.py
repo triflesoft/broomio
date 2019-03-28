@@ -79,7 +79,7 @@ async def listener():
     server_socket.reuse_addr = True
     server_socket.reuse_port = True
     server_socket.bind(('0.0.0.0', 7777))
-    server_socket.listen(1024)
+    await server_socket.listen(1024)
 
     async with Nursery() as nursery:
         while True:
