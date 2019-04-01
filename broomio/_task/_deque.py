@@ -145,7 +145,7 @@ class LoopTaskDeque(object):
                             socket_info.recv_task_info = None
                             self._info.socket_task_count -= 1
 
-                            self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN
+                            self._info.epoll_unregister(socket_info, 0x_0001) # EPOLLIN
 
                             # Enqueue task.
                             self._info.task_enqueue_old(child)
@@ -162,7 +162,7 @@ class LoopTaskDeque(object):
                             socket_info.send_task_info = None
                             self._info.socket_task_count -= 1
 
-                            self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
+                            self._info.epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
 
                             # Enqueue task.
                             self._info.task_enqueue_old(child)
@@ -275,15 +275,15 @@ class LoopTaskDeque(object):
                         assert socket_info.recv_task_info is None, 'Internal data structures are damaged.'
 
                         if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
-                            self._sock_accept(task_info, socket_info)
+                            self._info.sock_accept(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECV:
-                            self._sock_recv(task_info, socket_info)
+                            self._info.sock_recv(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECV_INTO:
-                            self._sock_recv_into(task_info, socket_info)
+                            self._info.sock_recv_into(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM:
-                            self._sock_recvfrom(task_info, socket_info)
+                            self._info.sock_recvfrom(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM_INTO:
-                            self._sock_recvfrom_into(task_info, socket_info)
+                            self._info.sock_recvfrom_into(task_info, socket_info)
                         else:
                             assert False, f'Unexpected syscall {task_info.yield_func}.'
                     else:
@@ -293,7 +293,7 @@ class LoopTaskDeque(object):
                         task_info.recv_fileno = fileno
                         self._info.socket_task_count += 1
 
-                        self._epoll_register(socket_info, 0x_0001) # EPOLLIN
+                        self._info.epoll_register(socket_info, 0x_0001) # EPOLLIN
 
                     del socket_info
                     del fileno
@@ -316,19 +316,19 @@ class LoopTaskDeque(object):
 
                         if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
                             # Close socket.
-                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                            self._info.epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                             if socket_info.recv_task_info:
                                 socket_info.recv_task_info.recv_fileno = None
                                 socket_info.recv_task_info = None
                                 self._info.socket_task_count -= 1
 
-                            self._sock_close(sock, socket_info)
+                            self._info.sock_close(sock, socket_info)
                             self._info.task_enqueue_old(task_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SEND:
-                            self._sock_send(task_info, socket_info)
+                            self._info.sock_send(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SENDTO:
-                            self._sock_sendto(task_info, socket_info)
+                            self._info.sock_sendto(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SHUTDOWN:
                             # TODO: SYSCALL_SOCKET_SHUTDOWN is not implemented yet.
                             pass
@@ -337,7 +337,7 @@ class LoopTaskDeque(object):
                     else:
                         if (task_info.yield_func == SYSCALL_SOCKET_CLOSE) and (socket_info.kind == SOCKET_KIND_SERVER_LISTENING):
                             # Close socket.
-                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                            self._info.epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                             socket_info.send_task_info = None
                             self._info.socket_task_count -= 1
@@ -347,7 +347,7 @@ class LoopTaskDeque(object):
                                 socket_info.recv_task_info = None
                                 self._info.socket_task_count -= 1
 
-                            self._sock_close(sock, socket_info)
+                            self._info.sock_close(sock, socket_info)
                             self._info.task_enqueue_old(task_info)
                         else:
                             # Socket is not yet ready for writing.
@@ -356,7 +356,7 @@ class LoopTaskDeque(object):
                             task_info.send_fileno = fileno
                             self._info.socket_task_count += 1
 
-                            self._epoll_register(socket_info, 0x_0004) # EPOLLOUT
+                            self._info.epoll_register(socket_info, 0x_0004) # EPOLLOUT
 
                     del socket_info
                     del fileno
@@ -376,7 +376,7 @@ class LoopTaskDeque(object):
                     task_info.send_fileno = fileno
                     self._info.socket_task_count += 1
 
-                    self._epoll_register(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                    self._info.epoll_register(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                     try:
                         sock.connect(addr)

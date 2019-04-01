@@ -1,3 +1,5 @@
+from ._sock import socket
+from ._util import _get_coro_stack_frames
 from heapq import heappush
 
 
@@ -196,3 +198,118 @@ class _LoopInfo(object):
         child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, nursery)
         nursery._children.add(child_task_info)
         heappush(self.time_heapq, (self.now + delay, child_task_info))
+
+    def sock_accept(self, task_info, socket_info):
+        assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, 'Internal data structures are damaged.'
+        # Accept as many connections as possible.
+        sock, nursery, handler_factory = task_info.yield_args
+        # Extract parent coroutine call chain frames.
+        stack_frames = _get_coro_stack_frames(task_info.coro)
+
+        try:
+            while True:
+                client_socket, client_address = sock.accept()
+                client_socket_info = self.sock_array[client_socket.fileno()]
+                assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, 'Internal data structures are damaged.'
+                client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
+                handler = handler_factory(socket(sock=client_socket), client_address)
+                self.task_enqueue_new(handler, task_info, stack_frames, nursery)
+        except OSError:
+            pass
+
+        self.task_enqueue_old(task_info)
+
+    def sock_send(self, task_info, socket_info):
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        # Send data.
+        sock, data = task_info.yield_args
+        size = sock.send(data)
+        # Enqueue task.
+        task_info.send_args = size
+        self.task_enqueue_old(task_info)
+
+    def sock_sendto(self, task_info, socket_info):
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        # Send data.
+        sock, data, addr = task_info.yield_args
+        size = sock.sendto(data, addr)
+        # Enqueue task.
+        task_info.send_args = size
+        self.task_enqueue_old(task_info)
+
+    def sock_recv(self, task_info, socket_info):
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        # Receive data.
+        sock, size = task_info.yield_args
+        data = sock.recv(size)
+        # Enqueue task.
+        task_info.send_args = data
+        self.task_enqueue_old(task_info)
+
+    def sock_recv_into(self, task_info, socket_info):
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        # Receive data.
+        sock, data, size = task_info.yield_args
+        size = sock.recv_into(data, size)
+        # Enqueue task.
+        task_info.send_args = size
+        self.task_enqueue_old(task_info)
+
+    def sock_recvfrom(self, task_info, socket_info):
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        # Receive data.
+        sock, size = task_info.yield_args
+        data, addr = sock.recvfrom(size)
+        # Enqueue task.
+        task_info.send_args = data, addr
+        self.task_enqueue_old(task_info)
+
+    def sock_recvfrom_into(self, task_info, socket_info):
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        # Receive data.
+        sock, data, size = task_info.yield_args
+        size, addr = sock.recvfrom_into(data, size)
+        # Enqueue task.
+        task_info.send_args = size, addr
+        self.task_enqueue_old(task_info)
+
+    def sock_close(self, sock, socket_info):
+        sock.close()
+        socket_info.kind = SOCKET_KIND_UNKNOWN
+        socket_info.recv_ready = False
+        socket_info.send_ready = False
+        socket_info.event_mask = 0
+
+    def epoll_register(self, socket_info, event_mask):
+        event_mask_diff = socket_info.event_mask ^ event_mask
+
+        if event_mask_diff > 0:
+            if event_mask_diff & 0x_0001 == 0x_0001: # EPOLLIN
+                self.socket_wait_count += 1
+
+            if event_mask_diff & 0x_0004 == 0x_0004: # EPOLLOUT
+                self.socket_wait_count += 1
+
+            if socket_info.event_mask == 0:
+                socket_info.event_mask = event_mask
+                self.socket_epoll.register(socket_info.fileno, 0x_2018 | socket_info.event_mask)
+            else:
+                socket_info.event_mask |= event_mask
+                self.socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
+
+    def epoll_unregister(self, socket_info, event_mask):
+        event_mask_diff = socket_info.event_mask ^ event_mask
+
+        if event_mask_diff > 0:
+            if event_mask_diff & 0x_0001 == 0x_0001: # EPOLLIN
+                self.socket_wait_count -= 1
+
+            if event_mask_diff & 0x_0004 == 0x_0004: # EPOLLOUT
+                self.socket_wait_count -= 1
+
+            if socket_info.event_mask == event_mask_diff:
+                socket_info.event_mask = 0
+                self.socket_epoll.unregister(socket_info.fileno)
+            else:
+                socket_info.event_mask &= ~event_mask
+                self.socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)

@@ -1,15 +1,10 @@
 from ._info import _LoopInfo
-from ._info import SOCKET_KIND_CLIENT_CONNECTION
-from ._info import SOCKET_KIND_SERVER_CONNECTION
-from ._info import SOCKET_KIND_SERVER_LISTENING
-from ._info import SOCKET_KIND_UNKNOWN
 from ._sock import socket
 from ._sock._epoll import LoopSockEpoll
 from ._task import Nursery
 from ._task._deque import LoopTaskDeque
 from ._time import sleep
 from ._time._heapq import LoopTimeHeapQ
-from ._util import _get_coro_stack_frames
 from sys import _getframe
 from time import time
 from traceback import print_exc
@@ -19,121 +14,6 @@ __all__ = ['Loop', 'Nursery', 'sleep', 'socket']
 
 
 class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
-    def _sock_accept(self, task_info, socket_info):
-        assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, 'Internal data structures are damaged.'
-        # Accept as many connections as possible.
-        sock, nursery, handler_factory = task_info.yield_args
-        # Extract parent coroutine call chain frames.
-        stack_frames = _get_coro_stack_frames(task_info.coro)
-
-        try:
-            while True:
-                client_socket, client_address = sock.accept()
-                client_socket_info = self._info.sock_array[client_socket.fileno()]
-                assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, 'Internal data structures are damaged.'
-                client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
-                handler = handler_factory(socket(sock=client_socket), client_address)
-                self._info.task_enqueue_new(handler, task_info, stack_frames, nursery)
-        except OSError:
-            pass
-
-        self._info.task_enqueue_old(task_info)
-
-    def _sock_send(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Send data.
-        sock, data = task_info.yield_args
-        size = sock.send(data)
-        # Enqueue task.
-        task_info.send_args = size
-        self._info.task_enqueue_old(task_info)
-
-    def _sock_sendto(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Send data.
-        sock, data, addr = task_info.yield_args
-        size = sock.sendto(data, addr)
-        # Enqueue task.
-        task_info.send_args = size
-        self._info.task_enqueue_old(task_info)
-
-    def _sock_recv(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Receive data.
-        sock, size = task_info.yield_args
-        data = sock.recv(size)
-        # Enqueue task.
-        task_info.send_args = data
-        self._info.task_enqueue_old(task_info)
-
-    def _sock_recv_into(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Receive data.
-        sock, data, size = task_info.yield_args
-        size = sock.recv_into(data, size)
-        # Enqueue task.
-        task_info.send_args = size
-        self._info.task_enqueue_old(task_info)
-
-    def _sock_recvfrom(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Receive data.
-        sock, size = task_info.yield_args
-        data, addr = sock.recvfrom(size)
-        # Enqueue task.
-        task_info.send_args = data, addr
-        self._info.task_enqueue_old(task_info)
-
-    def _sock_recvfrom_into(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Receive data.
-        sock, data, size = task_info.yield_args
-        size, addr = sock.recvfrom_into(data, size)
-        # Enqueue task.
-        task_info.send_args = size, addr
-        self._info.task_enqueue_old(task_info)
-
-    def _sock_close(self, sock, socket_info):
-        sock.close()
-        socket_info.kind = SOCKET_KIND_UNKNOWN
-        socket_info.recv_ready = False
-        socket_info.send_ready = False
-        socket_info.event_mask = 0
-
-    def _epoll_register(self, socket_info, event_mask):
-        event_mask_diff = socket_info.event_mask ^ event_mask
-
-        if event_mask_diff > 0:
-            if event_mask_diff & 0x_0001 == 0x_0001: # EPOLLIN
-                self._info.socket_wait_count += 1
-
-            if event_mask_diff & 0x_0004 == 0x_0004: # EPOLLOUT
-                self._info.socket_wait_count += 1
-
-            if socket_info.event_mask == 0:
-                socket_info.event_mask = event_mask
-                self._info.socket_epoll.register(socket_info.fileno, 0x_2018 | socket_info.event_mask)
-            else:
-                socket_info.event_mask |= event_mask
-                self._info.socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
-
-    def _epoll_unregister(self, socket_info, event_mask):
-        event_mask_diff = socket_info.event_mask ^ event_mask
-
-        if event_mask_diff > 0:
-            if event_mask_diff & 0x_0001 == 0x_0001: # EPOLLIN
-                self._info.socket_wait_count -= 1
-
-            if event_mask_diff & 0x_0004 == 0x_0004: # EPOLLOUT
-                self._info.socket_wait_count -= 1
-
-            if socket_info.event_mask == event_mask_diff:
-                socket_info.event_mask = 0
-                self._info.socket_epoll.unregister(socket_info.fileno)
-            else:
-                socket_info.event_mask &= ~event_mask
-                self._info.socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
-
     def __init__(self, technology=None):
         self._info = _LoopInfo(Nursery(), int(time()) % 2 == 0, technology)
 

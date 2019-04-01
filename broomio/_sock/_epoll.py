@@ -42,7 +42,7 @@ class LoopSockEpoll(object):
 
             if (event & 0x_0008) == 0x_0008: # EPOLLERR
                 # Socket failed.
-                self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                self._info.epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                 # Get socket.
                 if socket_info.send_task_info:
@@ -69,7 +69,7 @@ class LoopSockEpoll(object):
                     socket_info.recv_task_info = None
                     self._info.socket_task_count -= 1
 
-                self._sock_close(sock, socket_info)
+                self._info.sock_close(sock, socket_info)
 
                 del exception
                 del sock
@@ -83,7 +83,7 @@ class LoopSockEpoll(object):
                         # Mark as readale.
                         socket_info.recv_ready = True
 
-                        self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN
+                        self._info.epoll_unregister(socket_info, 0x_0001) # EPOLLIN
                     else:
                         # Unbind task and socket.
                         task_info.recv_fileno = None
@@ -91,15 +91,15 @@ class LoopSockEpoll(object):
                         self._info.socket_task_count -= 1
 
                         if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
-                            self._sock_accept(task_info, socket_info)
+                            self._info.sock_accept(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECV:
-                            self._sock_recv(task_info, socket_info)
+                            self._info.sock_recv(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECV_INTO:
-                            self._sock_recv_into(task_info, socket_info)
+                            self._info.sock_recv_into(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM:
-                            self._sock_recvfrom(task_info, socket_info)
+                            self._info.sock_recvfrom(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM_INTO:
-                            self._sock_recvfrom_into(task_info, socket_info)
+                            self._info.sock_recvfrom_into(task_info, socket_info)
                         else:
                             raise Exception(f'Unexpected syscall {task_info.yield_func}.')
 
@@ -112,7 +112,7 @@ class LoopSockEpoll(object):
                         # Mark as writable.
                         socket_info.send_ready = True
 
-                        self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
+                        self._info.epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
                     else:
                         # Unbind task and socket.
                         task_info.send_fileno = None
@@ -121,7 +121,7 @@ class LoopSockEpoll(object):
 
                         if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
                             # Close socket.
-                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                            self._info.epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                             if socket_info.recv_task_info:
                                 socket_info.recv_task_info.recv_fileno = None
@@ -130,7 +130,7 @@ class LoopSockEpoll(object):
 
                             sock = task_info.yield_args[0]
 
-                            self._sock_close(sock, socket_info)
+                            self._info.sock_close(sock, socket_info)
                             self._info.task_enqueue_old(task_info)
 
                             del sock
@@ -145,9 +145,9 @@ class LoopSockEpoll(object):
                             del addr
                             del sock
                         elif task_info.yield_func == SYSCALL_SOCKET_SEND:
-                            self._sock_send(task_info, socket_info)
+                            self._info.sock_send(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SENDTO:
-                            self._sock_sendto(task_info, socket_info)
+                            self._info.sock_sendto(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SHUTDOWN:
                             # TODO: SYSCALL_SOCKET_SHUTDOWN is not implemented yet.
                             pass
