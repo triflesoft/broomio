@@ -100,26 +100,6 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         socket_info.send_ready = False
         socket_info.event_mask = 0
 
-    def _sock_epoll_modify(self, socket_info):
-        if socket_info.event_mask == 0:
-            self._info.socket_epoll.unregister(socket_info.fileno)
-        else:
-            self._info.socket_epoll.modify(socket_info.fileno, socket_info.event_mask)
-
-        self._info.socket_wait_count -= 1
-
-    def _sock_epoll_unregister(self, socket_info):
-        # Close socket.
-        # Is socket registered for reading notification?
-        if socket_info.event_mask & 0x_0001 == 0x_0001: # EPOLLIN
-            self._info.socket_wait_count -= 1
-
-        # Is socket registered for writing notification?
-        if socket_info.event_mask & 0x_0004 == 0x_0004: # EPOLLOUT
-            self._info.socket_wait_count -= 1
-
-        self._info.socket_epoll.unregister(socket_info.fileno)
-
     def __init__(self, technology=None):
         self._info = _LoopInfo(Nursery(), int(time()) % 2 == 0, technology)
 
