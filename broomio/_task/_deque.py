@@ -151,7 +151,7 @@ class LoopTaskDeque(object):
                             if socket_info.event_mask == 0:
                                 self._info.socket_epoll.unregister(socket_info.fileno)
                             else:
-                                self._info.socket_epoll.modify(socket_info.fileno, socket_info.event_mask)
+                                self._info.socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
 
                             self._info.socket_wait_count -= 1
 
@@ -176,7 +176,7 @@ class LoopTaskDeque(object):
                             if socket_info.event_mask == 0:
                                 self._info.socket_epoll.unregister(socket_info.fileno)
                             else:
-                                self._info.socket_epoll.modify(socket_info.fileno, socket_info.event_mask)
+                                self._info.socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
 
                             self._info.socket_wait_count -= 1
 
@@ -312,12 +312,12 @@ class LoopTaskDeque(object):
                         # Is socket registered for reading notification?
                         if socket_info.event_mask & 0x_0001 == 0: # EPOLLIN
                             # Note that socket may be registered for writing notification.
-                            socket_info.event_mask |= 0x_2019 # EPOLLRDHUP | EPOLLHUP | EPOLLERR | EPOLLIN
+                            socket_info.event_mask |= 0x_0001 # EPOLLIN
 
                             if socket_info.event_mask & 0x_0004 == 0: # EPOLLOUT
-                                self._info.socket_epoll.register(fileno, socket_info.event_mask)
+                                self._info.socket_epoll.register(fileno, 0x_2018 | socket_info.event_mask)
                             else:
-                                self._info.socket_epoll.modify(fileno, socket_info.event_mask)
+                                self._info.socket_epoll.modify(fileno, 0x_2018 | socket_info.event_mask)
 
                             self._info.socket_wait_count += 1
 
@@ -401,12 +401,12 @@ class LoopTaskDeque(object):
                             # Is socket registered for writing notification?
                             if socket_info.event_mask & 0x_0004 == 0: # EPOLLOUT
                                 # Note that socket may be registered for reading notification.
-                                socket_info.event_mask |= 0x_201C # EPOLLRDHUP | EPOLLHUP | EPOLLERR | EPOLLOUT
+                                socket_info.event_mask |= 0x_0004 # EPOLLOUT
 
                                 if socket_info.event_mask & 0x_0001 == 0: # EPOLLIN
-                                    self._info.socket_epoll.register(fileno, socket_info.event_mask)
+                                    self._info.socket_epoll.register(fileno, 0x_2018 | socket_info.event_mask)
                                 else:
-                                    self._info.socket_epoll.modify(fileno, socket_info.event_mask)
+                                    self._info.socket_epoll.modify(fileno, 0x_2018 | socket_info.event_mask)
 
                                 self._info.socket_wait_count += 1
 
@@ -429,11 +429,11 @@ class LoopTaskDeque(object):
                     self._info.socket_task_count += 1
 
                     # Is socket registered for writing notification?
-                    if socket_info.event_mask & 0x_0004 == 0: # EPOLLOUT
+                    if socket_info.event_mask & 0x_0005 == 0: # EPOLLIN | EPOLLOUT
                         # Note that socket may be registered for reading notification.
-                        socket_info.event_mask |= 0x_201D # EPOLLRDHUP | EPOLLHUP | EPOLLERR | EPOLLIN | EPOLLOUT
+                        socket_info.event_mask |= 0x_0005 # EPOLLIN | EPOLLOUT
 
-                        self._info.socket_epoll.register(fileno, socket_info.event_mask)
+                        self._info.socket_epoll.register(fileno, 0x_2018 | socket_info.event_mask)
                         self._info.socket_wait_count += 2
 
                     try:

@@ -97,7 +97,7 @@ class LoopSockEpoll(object):
                         if socket_info.event_mask == 0:
                             self._info.socket_epoll.unregister(fileno)
                         else:
-                            self._info.socket_epoll.modify(fileno, socket_info.event_mask)
+                            self._info.socket_epoll.modify(fileno, 0x_2018 | socket_info.event_mask)
 
                         self._info.socket_wait_count -= 1
                     else:
@@ -134,7 +134,7 @@ class LoopSockEpoll(object):
                         if socket_info.event_mask == 0:
                             self._info.socket_epoll.unregister(fileno)
                         else:
-                            self._info.socket_epoll.modify(fileno, socket_info.event_mask)
+                            self._info.socket_epoll.modify(fileno, 0x_2018 | socket_info.event_mask)
 
                         self._info.socket_wait_count -= 1
                     else:
