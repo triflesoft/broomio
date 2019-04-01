@@ -4,9 +4,27 @@ from broomio import sleep
 from broomio import socket
 from unittest import main
 from unittest import TestCase
+from socket import AF_INET
+from socket import AF_INET6
+from socket import SOCK_DGRAM
+from socket import SOCK_STREAM
 
 
 class TestSocket(TestCase):
+    def test_socket_attributes(self):
+        tcp4_socket = socket('tcp4')
+        self.assertEqual(tcp4_socket._socket.family, AF_INET)
+        self.assertEqual(tcp4_socket._socket.type, SOCK_STREAM)
+        tcp6_socket = socket('tcp6')
+        self.assertEqual(tcp6_socket._socket.family, AF_INET6)
+        self.assertEqual(tcp6_socket._socket.type, SOCK_STREAM)
+        udp4_socket = socket('udp4')
+        self.assertEqual(udp4_socket._socket.family, AF_INET)
+        self.assertEqual(udp4_socket._socket.type, SOCK_DGRAM)
+        udp6_socket = socket('udp6')
+        self.assertEqual(udp6_socket._socket.family, AF_INET6)
+        self.assertEqual(udp6_socket._socket.type, SOCK_DGRAM)
+
     def test_socket_listen_connect(self):
         async def server_client_handler(client_socket2, client_address):
             self.assertEqual(await client_socket2.recv(1), b'A')
