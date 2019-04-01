@@ -42,15 +42,7 @@ class LoopSockEpoll(object):
 
             if (event & 0x_0008) == 0x_0008: # EPOLLERR
                 # Socket failed.
-                # Is socket registered for reading notification?
-                if socket_info.event_mask & 0x_0001 == 0x_0001: # EPOLLIN
-                    self._info.socket_wait_count -= 1
-
-                # Is socket registered for writing notification?
-                if socket_info.event_mask & 0x_0004 == 0x_0004: # EPOLLOUT
-                    self._info.socket_wait_count -= 1
-
-                self._info.socket_epoll.unregister(fileno)
+                self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                 # Get socket.
                 if socket_info.send_task_info:
@@ -91,15 +83,7 @@ class LoopSockEpoll(object):
                         # Mark as readale.
                         socket_info.recv_ready = True
 
-                        # Note that socket may be registered for writing notification.
-                        socket_info.event_mask &= 0x_FFFE # ~0x_0001 EPOLLIN
-
-                        if socket_info.event_mask == 0:
-                            self._info.socket_epoll.unregister(fileno)
-                        else:
-                            self._info.socket_epoll.modify(fileno, 0x_2018 | socket_info.event_mask)
-
-                        self._info.socket_wait_count -= 1
+                        self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN
                     else:
                         # Unbind task and socket.
                         task_info.recv_fileno = None
@@ -128,15 +112,7 @@ class LoopSockEpoll(object):
                         # Mark as writable.
                         socket_info.send_ready = True
 
-                        # Note that socket may be registered for reading notification.
-                        socket_info.event_mask &= 0x_FFFB # ~0x_0004 EPOLLOUT
-
-                        if socket_info.event_mask == 0:
-                            self._info.socket_epoll.unregister(fileno)
-                        else:
-                            self._info.socket_epoll.modify(fileno, 0x_2018 | socket_info.event_mask)
-
-                        self._info.socket_wait_count -= 1
+                        self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
                     else:
                         # Unbind task and socket.
                         task_info.send_fileno = None
@@ -145,15 +121,7 @@ class LoopSockEpoll(object):
 
                         if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
                             # Close socket.
-                            # Is socket registered for reading notification?
-                            if socket_info.event_mask & 0x_0001 == 0x_0001: # EPOLLIN
-                                self._info.socket_wait_count -= 1
-
-                            # Is socket registered for writing notification?
-                            if socket_info.event_mask & 0x_0004 == 0x_0004: # EPOLLOUT
-                                self._info.socket_wait_count -= 1
-
-                            self._info.socket_epoll.unregister(fileno)
+                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                             if socket_info.recv_task_info:
                                 socket_info.recv_task_info.recv_fileno = None
