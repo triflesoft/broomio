@@ -79,237 +79,29 @@ class _SocketInfo(object):
 
 
 class _SelectFakeEPoll(object):
+    __slots__ = '_rlist', '_wlist', '_xlist', '_fdict'
+
     def __init__(self):
-        from select import select
+        from collections import defaultdict
+
+        self._rlist = []
+        self._wlist = []
+        self._xlist = []
+        self._fdict = defaultdict(int)
 
     def register(self, fd, eventmask):
-        pass
-
-    def modify(self, fd, eventmask):
-        pass
+        self.modify(fd, eventmask)
 
     def unregister(self, fd):
-        pass
+        self.modify(fd, 0)
 
-    def poll(self, timeout):
-        pass
+    def modify(self, fd, eventmask):
+        old_eventmask = self._fdict[fd]
 
-#
-# Loop intofmation
-#
-class _LoopInfo(object):
-    __slots__ = \
-        'task_deque', 'task_enqueue_old', 'task_nursery', \
-        'time_heapq', 'now', \
-        'sock_array', 'get_sock_info', 'socket_wait_count', 'socket_task_count', 'socket_epoll'
-
-    def __init__(self, task_nursery, queue_is_right, technology=None):
-        from collections import deque
-        from resource import getrlimit
-        from resource import RLIMIT_NOFILE
-
-        _, nofile_hard = getrlimit(RLIMIT_NOFILE)
-
-        # Deque with tasks ready to be executed.
-        # These are new tasks or tasks for which requested syscall completed.
-        self.task_deque = deque()
-
-        # SPEED: Much faster than declaring method, which calls method.
-        # SPEED:
-        # SPEED: def task_enqueue_old(self, task_info): # THIS IS SLOW
-        # SPEED:     self.task_deque.append(task_info)  # THIS IS SLOW
-        # SPEED:
-
-        # Also, task order is randomized by queue_is_right
-        self.task_enqueue_old = self.task_deque.append if queue_is_right else self.task_deque.appendleft
-
-        # Root nursery.
-        self.task_nursery = task_nursery
-
-        # HeapQ with tasks scheduled to run later.9o
-        self.time_heapq = []
-        self.now = 0
-
-        # For Linux: \
-        # Array of sockets. Indexes in list are file descriptors. O(1) access time.
-        # Why can we do this? Man page socket(2) states:
-        #     The file descriptor returned by a successful call will be \
-        #     the lowest-numbered file descriptor not currently open for the process.
-        # While some indexes will not be used, for instance 0, 1, and 2, because \
-        # they will correspond to file descriptors opened by different means, we \
-        # still may assume values of file descriptors to be small integers.
-        # For Windows \
-        # Dict of sockets. Keys in dict are file descriptors. O(log(N)) access time.
-        # No assumptions about socket file descriptor values' range \
-        # can possibly be deducted from MSDN.
-        self.sock_array = [_SocketInfo(fileno) for fileno in range(nofile_hard)]
-
-        # SPEED: Much faster than declaring method, which calls method.
-        # SPEED:
-        # SPEED: def get_sock_info(self, fileno):   # THIS IS SLOW
-        # SPEED:     return self.sock_array[fileno] # THIS IS SLOW
-        # SPEED:
-        self.get_sock_info = self.sock_array.__getitem__
-
-        # Number of sockets waiting to become readable or writable.
-        # If socket is awaited to become readable and writable, it will be counted twice.
-        self.socket_wait_count = 0
-
-        # Number of task awaiting for sockets to become readable or writable.
-        self.socket_task_count = 0
-
-        # Event polling is Linux specific for now.
-        # TODO: Support select.
-        # TODO: Support IOCP.
-        # TODO: Support kqueue.
-
-        if technology:
-            technologies = [technology, 'epoll', 'iocp', 'kqueue', 'poll', 'select']
-        else:
-            technologies = ['epoll', 'iocp', 'kqueue', 'poll']
-
-            for technology in technologies:
-                if technology == 'epoll':
-                    try:
-                        from select import epoll
-
-                        self.socket_epoll = epoll(1024)
-                        break
-                    except ModuleNotFoundError:
-                        pass
-                elif technology == 'poll':
-                    try:
-                        from select import poll
-
-                        self.socket_epoll = poll()
-                        break
-                    except ModuleNotFoundError:
-                        pass
-
-        if not self.socket_epoll:
-            self.socket_epoll = _SelectFakeEPoll()
-
-    def task_enqueue_new(self, coro, parent_task_info, stack_frames, nursery):
-        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, nursery)
-        nursery._children.add(child_task_info)
-        self.task_enqueue_old(child_task_info)
-
-    def task_enqueue_new_delay(self, coro, parent_task_info, stack_frames, nursery, delay):
-        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, nursery)
-        nursery._children.add(child_task_info)
-        heappush(self.time_heapq, (self.now + delay, child_task_info))
-
-    def sock_accept(self, task_info, socket_info):
-        assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, 'Internal data structures are damaged.'
-        # Accept as many connections as possible.
-        sock, nursery, handler_factory = task_info.yield_args
-        # Extract parent coroutine call chain frames.
-        stack_frames = _get_coro_stack_frames(task_info.coro)
-
-        try:
-            while True:
-                client_socket, client_address = sock.accept()
-                client_socket_info = self.sock_array[client_socket.fileno()]
-                assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, 'Internal data structures are damaged.'
-                client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
-                handler = handler_factory(socket(sock=client_socket), client_address)
-                self.task_enqueue_new(handler, task_info, stack_frames, nursery)
-        except OSError:
+        if old_eventmask != eventmask:
             pass
 
-        self.task_enqueue_old(task_info)
+    def poll(self, timeout):
+        from select import select
 
-    def sock_send(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Send data.
-        sock, data = task_info.yield_args
-        size = sock.send(data)
-        # Enqueue task.
-        task_info.send_args = size
-        self.task_enqueue_old(task_info)
-
-    def sock_sendto(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Send data.
-        sock, data, addr = task_info.yield_args
-        size = sock.sendto(data, addr)
-        # Enqueue task.
-        task_info.send_args = size
-        self.task_enqueue_old(task_info)
-
-    def sock_recv(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Receive data.
-        sock, size = task_info.yield_args
-        data = sock.recv(size)
-        # Enqueue task.
-        task_info.send_args = data
-        self.task_enqueue_old(task_info)
-
-    def sock_recv_into(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Receive data.
-        sock, data, size = task_info.yield_args
-        size = sock.recv_into(data, size)
-        # Enqueue task.
-        task_info.send_args = size
-        self.task_enqueue_old(task_info)
-
-    def sock_recvfrom(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Receive data.
-        sock, size = task_info.yield_args
-        data, addr = sock.recvfrom(size)
-        # Enqueue task.
-        task_info.send_args = data, addr
-        self.task_enqueue_old(task_info)
-
-    def sock_recvfrom_into(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
-        # Receive data.
-        sock, data, size = task_info.yield_args
-        size, addr = sock.recvfrom_into(data, size)
-        # Enqueue task.
-        task_info.send_args = size, addr
-        self.task_enqueue_old(task_info)
-
-    def sock_close(self, sock, socket_info):
-        sock.close()
-        socket_info.kind = SOCKET_KIND_UNKNOWN
-        socket_info.recv_ready = False
-        socket_info.send_ready = False
-        socket_info.event_mask = 0
-
-    def epoll_register(self, socket_info, event_mask):
-        event_mask_diff = socket_info.event_mask ^ event_mask
-
-        if event_mask_diff > 0:
-            if event_mask_diff & 0x_0001 == 0x_0001: # EPOLLIN
-                self.socket_wait_count += 1
-
-            if event_mask_diff & 0x_0004 == 0x_0004: # EPOLLOUT
-                self.socket_wait_count += 1
-
-            if socket_info.event_mask == 0:
-                socket_info.event_mask = event_mask
-                self.socket_epoll.register(socket_info.fileno, 0x_2018 | socket_info.event_mask)
-            else:
-                socket_info.event_mask |= event_mask
-                self.socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
-
-    def epoll_unregister(self, socket_info, event_mask):
-        event_mask_diff = socket_info.event_mask ^ event_mask
-
-        if event_mask_diff > 0:
-            if event_mask_diff & 0x_0001 == 0x_0001: # EPOLLIN
-                self.socket_wait_count -= 1
-
-            if event_mask_diff & 0x_0004 == 0x_0004: # EPOLLOUT
-                self.socket_wait_count -= 1
-
-            if socket_info.event_mask == event_mask_diff:
-                socket_info.event_mask = 0
-                self.socket_epoll.unregister(socket_info.fileno)
-            else:
-                socket_info.event_mask &= ~event_mask
-                self.socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
+        rlist, wlist, xlist = select(self._rlist, self._wlist, self._xlist, timeout)

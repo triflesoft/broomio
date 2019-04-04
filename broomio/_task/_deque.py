@@ -40,15 +40,12 @@ SYSCALL_SOCKET_WRITE = set([
 
 
 class LoopTaskDeque(object):
-    def __init__(self):
-        self._info = None
-
     def _process_task(self):
         # Cycle while there are tasks ready for execution.
         # New tasks may be enqueued while this loop cycles.
-        while len(self._info.task_deque) > 0:
+        while len(self._task_deque) > 0:
             # Get next task.
-            task_info = self._info.task_deque.pop()
+            task_info = self._task_deque.pop()
             coro_succeeded = False
 
             try:
@@ -92,7 +89,7 @@ class LoopTaskDeque(object):
                 if len(nursery._children) == 0:
                     # Notify all watchers.
                     for watcher in nursery._watchers:
-                        self._info.task_enqueue_old(watcher)
+                        self._task_enqueue_old(watcher)
 
                 del nursery
             except GeneratorExit:
@@ -107,7 +104,7 @@ class LoopTaskDeque(object):
                 if len(nursery._children) == 0:
                     # Notify all watchers.
                     for watcher in nursery._watchers:
-                        self._info.task_enqueue_old(watcher)
+                        self._task_enqueue_old(watcher)
 
                 del nursery
             except Exception:
@@ -120,13 +117,13 @@ class LoopTaskDeque(object):
                 if len(nursery._children) == 0:
                     # Notify all watchers.
                     for watcher in nursery._watchers:
-                        self._info.task_enqueue_old(watcher)
+                        self._task_enqueue_old(watcher)
                 else:
                     # Cancel all other child tasks.
-                    # Child task is already queued either in task_deque, time_heapq or sock_array.
-                    # If child task is already is task_deque there is no need to add it to task_deque again.
-                    # However if child task is in time_heapq or sock_array, it must be removed from there \
-                    # and aded to task_deque for throwing an exception.
+                    # Child task is already queued either in _task_deque, _time_heapq or _sock_array.
+                    # If child task is already is _task_deque there is no need to add it to _task_deque again.
+                    # However if child task is in _time_heapq or _sock_array, it must be removed from there \
+                    # and aded to _task_deque for throwing an exception.
                     has_time_changes = False
 
                     for child in nursery._children:
@@ -136,36 +133,36 @@ class LoopTaskDeque(object):
 
                         if not child.recv_fileno is None:
                             # This task is waiting for socket to become readable.
-                            socket_info = self._info.get_sock_info(child.recv_fileno)
+                            socket_info = self._get_sock_info(child.recv_fileno)
 
                             assert child == socket_info.recv_task_info, 'Internal data structures are damaged.'
 
                             # Unbind task and socket.
                             child.recv_fileno = None
                             socket_info.recv_task_info = None
-                            self._info.socket_task_count -= 1
+                            self._socket_task_count -= 1
 
-                            self._info.epoll_unregister(socket_info, 0x_0001) # EPOLLIN
+                            self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN
 
                             # Enqueue task.
-                            self._info.task_enqueue_old(child)
+                            self._task_enqueue_old(child)
 
                             del socket_info
                         elif not child.send_fileno is None:
                             # This task is waiting for socket to become writable.
-                            socket_info = self._info.get_sock_info(child.send_fileno)
+                            socket_info = self._get_sock_info(child.send_fileno)
 
                             assert child == socket_info.send_task_info, 'Internal data structures are damaged.'
 
                             # Unbind task and socket.
                             child.send_fileno = None
                             socket_info.send_task_info = None
-                            self._info.socket_task_count -= 1
+                            self._socket_task_count -= 1
 
-                            self._info.epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
+                            self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
 
                             # Enqueue task.
-                            self._info.task_enqueue_old(child)
+                            self._task_enqueue_old(child)
 
                             del socket_info
                         else:
@@ -174,13 +171,13 @@ class LoopTaskDeque(object):
                                 # and reschedule task to be tun in current tick.
                                 index = 0
 
-                                while index < len(self._info.time_heapq):
-                                    _, time_task_info = self._info.time_heapq[index]
+                                while index < len(self._time_heapq):
+                                    _, time_task_info = self._time_heapq[index]
 
                                     if time_task_info == child:
-                                        self._info.time_heapq.pop(index)
+                                        self._time_heapq.pop(index)
                                         has_time_changes = True
-                                        self._info.task_enqueue_old(child)
+                                        self._task_enqueue_old(child)
                                         break
                                     else:
                                         index += 1
@@ -189,7 +186,7 @@ class LoopTaskDeque(object):
 
                     # HeapQ must be rebuilt.
                     if has_time_changes:
-                        heapify(self._info.time_heapq)
+                        heapify(self._time_heapq)
 
                     del has_time_changes
                 del nursery
@@ -202,10 +199,10 @@ class LoopTaskDeque(object):
                     # Is delay greater than zero?
                     if delay > 0:
                         # Schedule for later execution.
-                        heappush(self._info.time_heapq, (self._info.now + delay, task_info))
+                        heappush(self._time_heapq, (self._now + delay, task_info))
                     else:
                         # Otherwise enqueue task to be executed in current tick.
-                        self._info.task_enqueue_old(task_info)
+                        self._task_enqueue_old(task_info)
 
                     del delay
                 elif task_info.yield_func == SYSCALL_NURSERY_JOIN:
@@ -229,9 +226,9 @@ class LoopTaskDeque(object):
                     # Extract parent coroutine call chain frames.
                     stack_frames = _get_coro_stack_frames(task_info.coro)
                     # Enqueue child task. Current task will be parent.
-                    self._info.task_enqueue_new(coro, task_info, stack_frames, nursery)
+                    self._task_enqueue_new(coro, task_info, stack_frames, nursery)
                     # Enqueue current (parent) task.
-                    self._info.task_enqueue_old(task_info)
+                    self._task_enqueue_old(task_info)
 
                     del coro
                     del nursery
@@ -245,13 +242,13 @@ class LoopTaskDeque(object):
                     # Is delay greater than zero?
                     if delay > 0:
                         # Enqueue child task. Current task will be parent.
-                        self._info.task_enqueue_new_delay(coro, task_info, stack_frames, nursery, delay)
+                        self._task_enqueue_new_delay(coro, task_info, stack_frames, nursery, delay)
                     else:
                         # Enqueue child task. Current task will be parent.
-                        self._info.task_enqueue_new(coro, task_info, stack_frames, nursery)
+                        self._task_enqueue_new(coro, task_info, stack_frames, nursery)
 
                     # Enqueue current (parent) task.
-                    self._info.task_enqueue_old(task_info)
+                    self._task_enqueue_old(task_info)
 
                     del stack_frames
                     del delay
@@ -262,7 +259,7 @@ class LoopTaskDeque(object):
 
                     sock = task_info.yield_args[0]
                     fileno = sock.fileno()
-                    socket_info = self._info.get_sock_info(fileno)
+                    socket_info = self._get_sock_info(fileno)
 
                     assert socket_info.recv_task_info is None, f'Another task {socket_info.recv_task_info.coro} is already receiving on this socket.'
                     assert task_info.recv_fileno is None, 'Task is already waiting for another socket to become readable.'
@@ -275,15 +272,15 @@ class LoopTaskDeque(object):
                         assert socket_info.recv_task_info is None, 'Internal data structures are damaged.'
 
                         if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
-                            self._info.sock_accept(task_info, socket_info)
+                            self._sock_accept(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECV:
-                            self._info.sock_recv(task_info, socket_info)
+                            self._sock_recv(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECV_INTO:
-                            self._info.sock_recv_into(task_info, socket_info)
+                            self._sock_recv_into(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM:
-                            self._info.sock_recvfrom(task_info, socket_info)
+                            self._sock_recvfrom(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM_INTO:
-                            self._info.sock_recvfrom_into(task_info, socket_info)
+                            self._sock_recvfrom_into(task_info, socket_info)
                         else:
                             assert False, f'Unexpected syscall {task_info.yield_func}.'
                     else:
@@ -291,9 +288,9 @@ class LoopTaskDeque(object):
                         # Bind task and socket.
                         socket_info.recv_task_info = task_info
                         task_info.recv_fileno = fileno
-                        self._info.socket_task_count += 1
+                        self._socket_task_count += 1
 
-                        self._info.epoll_register(socket_info, 0x_0001) # EPOLLIN
+                        self._epoll_register(socket_info, 0x_0001) # EPOLLIN
 
                     del socket_info
                     del fileno
@@ -302,7 +299,7 @@ class LoopTaskDeque(object):
                     # Some kind of socket writing.
                     sock = task_info.yield_args[0]
                     fileno = sock.fileno()
-                    socket_info = self._info.get_sock_info(fileno)
+                    socket_info = self._get_sock_info(fileno)
 
                     assert socket_info.send_task_info is None, f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
                     assert task_info.recv_fileno is None, 'Task is already waiting for another socket to become readable.'
@@ -316,19 +313,19 @@ class LoopTaskDeque(object):
 
                         if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
                             # Close socket.
-                            self._info.epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                             if socket_info.recv_task_info:
                                 socket_info.recv_task_info.recv_fileno = None
                                 socket_info.recv_task_info = None
-                                self._info.socket_task_count -= 1
+                                self._socket_task_count -= 1
 
-                            self._info.sock_close(sock, socket_info)
-                            self._info.task_enqueue_old(task_info)
+                            self._sock_close(sock, socket_info)
+                            self._task_enqueue_old(task_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SEND:
-                            self._info.sock_send(task_info, socket_info)
+                            self._sock_send(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SENDTO:
-                            self._info.sock_sendto(task_info, socket_info)
+                            self._sock_sendto(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SHUTDOWN:
                             # TODO: SYSCALL_SOCKET_SHUTDOWN is not implemented yet.
                             pass
@@ -337,26 +334,26 @@ class LoopTaskDeque(object):
                     else:
                         if (task_info.yield_func == SYSCALL_SOCKET_CLOSE) and (socket_info.kind == SOCKET_KIND_SERVER_LISTENING):
                             # Close socket.
-                            self._info.epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                             socket_info.send_task_info = None
-                            self._info.socket_task_count -= 1
+                            self._socket_task_count -= 1
 
                             if socket_info.recv_task_info:
                                 socket_info.recv_task_info.recv_fileno = None
                                 socket_info.recv_task_info = None
-                                self._info.socket_task_count -= 1
+                                self._socket_task_count -= 1
 
-                            self._info.sock_close(sock, socket_info)
-                            self._info.task_enqueue_old(task_info)
+                            self._sock_close(sock, socket_info)
+                            self._task_enqueue_old(task_info)
                         else:
                             # Socket is not yet ready for writing.
                             # Bind task and socket.
                             socket_info.send_task_info = task_info
                             task_info.send_fileno = fileno
-                            self._info.socket_task_count += 1
+                            self._socket_task_count += 1
 
-                            self._info.epoll_register(socket_info, 0x_0004) # EPOLLOUT
+                            self._epoll_register(socket_info, 0x_0004) # EPOLLOUT
 
                     del socket_info
                     del fileno
@@ -365,7 +362,7 @@ class LoopTaskDeque(object):
                     # Connect.
                     sock, addr = task_info.yield_args
                     fileno = sock.fileno()
-                    socket_info = self._info.get_sock_info(fileno)
+                    socket_info = self._get_sock_info(fileno)
 
                     assert socket_info.send_task_info is None, f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
                     assert task_info.recv_fileno is None, 'Task is already waiting for another socket to become readable.'
@@ -374,9 +371,9 @@ class LoopTaskDeque(object):
                     # Bind task and socket.
                     socket_info.send_task_info = task_info
                     task_info.send_fileno = fileno
-                    self._info.socket_task_count += 1
+                    self._socket_task_count += 1
 
-                    self._info.epoll_register(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                    self._epoll_register(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                     try:
                         sock.connect(addr)
@@ -391,7 +388,7 @@ class LoopTaskDeque(object):
                     # Listen.
                     sock, backlog = task_info.yield_args
                     fileno = sock.fileno()
-                    socket_info = self._info.get_sock_info(fileno)
+                    socket_info = self._get_sock_info(fileno)
 
                     assert socket_info.send_task_info is None, f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
                     assert socket_info.recv_task_info is None, f'Another task {socket_info.recv_task_info.coro} is already receiving on this socket.'
@@ -402,7 +399,7 @@ class LoopTaskDeque(object):
 
                     socket_info.kind = SOCKET_KIND_SERVER_LISTENING
 
-                    self._info.task_enqueue_old(task_info)
+                    self._task_enqueue_old(task_info)
 
                     del socket_info
                     del fileno
