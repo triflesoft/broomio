@@ -1,29 +1,59 @@
+#!/usr/bin/env python3
+
 from broomio import Loop
 from broomio import Nursery
 from broomio import sleep
 from broomio import socket
-from unittest import main
-from unittest import TestCase
 from socket import AF_INET
 from socket import AF_INET6
 from socket import SOCK_DGRAM
 from socket import SOCK_STREAM
+from tracemalloc import start
+from unittest import main
+from unittest import TestCase
+
+
+start(4)
 
 
 class TestSocket(TestCase):
     def test_socket_attributes(self):
-        tcp4_socket = socket('tcp4')
-        self.assertEqual(tcp4_socket._socket.family, AF_INET)
-        self.assertEqual(tcp4_socket._socket.type, SOCK_STREAM)
-        tcp6_socket = socket('tcp6')
-        self.assertEqual(tcp6_socket._socket.family, AF_INET6)
-        self.assertEqual(tcp6_socket._socket.type, SOCK_STREAM)
-        udp4_socket = socket('udp4')
-        self.assertEqual(udp4_socket._socket.family, AF_INET)
-        self.assertEqual(udp4_socket._socket.type, SOCK_DGRAM)
-        udp6_socket = socket('udp6')
-        self.assertEqual(udp6_socket._socket.family, AF_INET6)
-        self.assertEqual(udp6_socket._socket.type, SOCK_DGRAM)
+        async def create():
+            tcp4_socket = socket('tcp4')
+            self.assertEqual(tcp4_socket._socket.family, AF_INET)
+            self.assertEqual(tcp4_socket._socket.type, SOCK_STREAM)
+            tcp6_socket = socket('tcp6')
+            self.assertEqual(tcp6_socket._socket.family, AF_INET6)
+            self.assertEqual(tcp6_socket._socket.type, SOCK_STREAM)
+            udp4_socket = socket('udp4')
+            self.assertEqual(udp4_socket._socket.family, AF_INET)
+            self.assertEqual(udp4_socket._socket.type, SOCK_DGRAM)
+            udp6_socket = socket('udp6')
+            self.assertEqual(udp6_socket._socket.family, AF_INET6)
+            self.assertEqual(udp6_socket._socket.type, SOCK_DGRAM)
+
+            await tcp4_socket.close()
+            await tcp6_socket.close()
+            await udp4_socket.close()
+            await udp6_socket.close()
+
+        loop = Loop()
+        loop.start_soon(create())
+        loop.run()
+
+    def test_socket_timeout(self):
+        async def client_connect():
+            client_socket = socket()
+
+            try:
+                #await client_socket.connect(('169.254.0.1', 65534))
+                pass
+            finally:
+                await client_socket.close()
+
+        loop = Loop()
+        loop.start_soon(client_connect())
+        loop.run()
 
     def test_socket_listen_connect(self):
         async def server_client_handler(client_socket2, client_address):
