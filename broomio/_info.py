@@ -1,5 +1,6 @@
 from ._sock import socket
 from ._util import _get_coro_stack_frames
+from collections import defaultdict
 from heapq import heappush
 
 
@@ -82,8 +83,6 @@ class _SelectFakeEPoll(object):
     __slots__ = '_rlist', '_wlist', '_xlist', '_fdict'
 
     def __init__(self):
-        from collections import defaultdict
-
         self._rlist = []
         self._wlist = []
         self._xlist = []
@@ -96,12 +95,51 @@ class _SelectFakeEPoll(object):
         self.modify(fd, 0)
 
     def modify(self, fd, eventmask):
+        eventmask = eventmask & 0x_0005 # EPOLLIN | # EPOLLOUT
         old_eventmask = self._fdict[fd]
 
-        if old_eventmask != eventmask:
-            pass
+        if old_eventmask == 0 and eventmask != 0:
+            self._xlist.append(fd)
+
+        if old_eventmask != 0 and eventmask == 0:
+            self._xlist.remove(fd)
+
+        if (old_eventmask ^ eventmask) & 0x_0001 == 0x_0001: # EPOLLIN
+            # Read event mask changed
+
+            if old_eventmask & 0x_0001 == 0x_0001:
+                # Must stop reading
+                self._rlist.remove(fd)
+            else:
+                # Must start reading
+                self._rlist.append(fd)
+
+        if (old_eventmask ^ eventmask) & 0x_0004 == 0x_0004: # EPOLLOUT
+            # Write event mask changed
+
+            if old_eventmask & 0x_0004 == 0x_0004:
+                # Must stop writing
+                self._wlist.remove(fd)
+            else:
+                # Must start writing
+                self._wlist.append(fd)
+
+        self._fdict[fd] = eventmask
 
     def poll(self, timeout):
         from select import select
 
         rlist, wlist, xlist = select(self._rlist, self._wlist, self._xlist, timeout)
+
+        events = defaultdict(int)
+
+        for fd in rlist:
+            events[fd] |= 0x_0001 # EPOLLIN
+
+        for fd in wlist:
+            events[fd] |= 0x_0004 # EPOLLOUT
+
+        for fd in xlist:
+            events[fd] |= 0x_0008 # EPOLLERR
+
+        return events.items()

@@ -219,23 +219,26 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         else:
             technologies = ['epoll', 'iocp', 'kqueue', 'poll']
 
-            for technology in technologies:
-                if technology == 'epoll':
-                    try:
-                        from select import epoll
+        for technology in technologies:
+            if technology == 'epoll':
+                try:
+                    from select import epoll
 
-                        self._socket_epoll = epoll(1024)
-                        break
-                    except ModuleNotFoundError:
-                        pass
-                elif technology == 'poll':
-                    try:
-                        from select import poll
+                    self._socket_epoll = epoll(1024)
+                    break
+                except ModuleNotFoundError:
+                    pass
+            elif technology == 'poll':
+                try:
+                    from select import poll
 
-                        self._socket_epoll = poll()
-                        break
-                    except ModuleNotFoundError:
-                        pass
+                    self._socket_epoll = poll()
+                    break
+                except ModuleNotFoundError:
+                    pass
+            elif technology == 'select':
+                self._socket_epoll = _SelectFakeEPoll()
+                break
 
         if not self._socket_epoll:
             self._socket_epoll = _SelectFakeEPoll()
