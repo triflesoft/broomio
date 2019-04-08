@@ -135,7 +135,7 @@ class LoopTaskDeque(object):
                             # This task is waiting for socket to become readable.
                             socket_info = self._get_sock_info(child.recv_fileno)
 
-                            assert child == socket_info.recv_task_info, 'Internal data structures are damaged.'
+                            assert child == socket_info.recv_task_info, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
                             # Unbind task and socket.
                             child.recv_fileno = None
@@ -152,7 +152,7 @@ class LoopTaskDeque(object):
                             # This task is waiting for socket to become writable.
                             socket_info = self._get_sock_info(child.send_fileno)
 
-                            assert child == socket_info.send_task_info, 'Internal data structures are damaged.'
+                            assert child == socket_info.send_task_info, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
                             # Unbind task and socket.
                             child.send_fileno = None
@@ -269,7 +269,7 @@ class LoopTaskDeque(object):
                         # Socket is already ready for reading.
                         socket_info.recv_ready = False
 
-                        assert socket_info.recv_task_info is None, 'Internal data structures are damaged.'
+                        assert socket_info.recv_task_info is None, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
                         if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
                             self._sock_accept(task_info, socket_info)
@@ -308,7 +308,7 @@ class LoopTaskDeque(object):
                         # Socket is already ready for writing.
                         socket_info.send_ready = False
 
-                        assert socket_info.send_task_info is None, 'Internal data structures are damaged.'
+                        assert socket_info.send_task_info is None, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
                         if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
                             # Close socket.

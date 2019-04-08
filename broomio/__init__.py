@@ -40,7 +40,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         heappush(self._time_heapq, (self._now + delay, child_task_info))
 
     def _sock_accept(self, task_info, socket_info):
-        assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, 'Internal data structures are damaged.'
+        assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
         # Accept as many connections as possible.
         sock, nursery, handler_factory = task_info.yield_args
         # Extract parent coroutine call chain frames.
@@ -50,7 +50,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
             while True:
                 client_socket, client_address = sock.accept()
                 client_socket_info = self._get_sock_info(client_socket.fileno())
-                assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, 'Internal data structures are damaged.'
+                assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
                 client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
                 handler = handler_factory(socket(sock=client_socket), client_address)
                 self._task_enqueue_new(handler, task_info, stack_frames, nursery)
@@ -60,7 +60,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         self._task_enqueue_old(task_info)
 
     def _sock_send(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
         # Send data.
         sock, data = task_info.yield_args
         size = sock.send(data)
@@ -69,7 +69,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         self._task_enqueue_old(task_info)
 
     def _sock_sendto(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
         # Send data.
         sock, data, addr = task_info.yield_args
         size = sock.sendto(data, addr)
@@ -78,7 +78,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         self._task_enqueue_old(task_info)
 
     def _sock_recv(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
         # Receive data.
         sock, size = task_info.yield_args
         data = sock.recv(size)
@@ -87,7 +87,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         self._task_enqueue_old(task_info)
 
     def _sock_recv_into(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
         # Receive data.
         sock, data, size = task_info.yield_args
         size = sock.recv_into(data, size)
@@ -96,7 +96,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         self._task_enqueue_old(task_info)
 
     def _sock_recvfrom(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
         # Receive data.
         sock, size = task_info.yield_args
         data, addr = sock.recvfrom(size)
@@ -105,7 +105,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         self._task_enqueue_old(task_info)
 
     def _sock_recvfrom_into(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), 'Internal data structures are damaged.'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
         # Receive data.
         sock, data, size = task_info.yield_args
         size, addr = sock.recvfrom_into(data, size)
@@ -114,16 +114,18 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         self._task_enqueue_old(task_info)
 
     def _sock_close(self, sock, socket_info):
+        assert socket_info.event_mask == 0, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
         sock.close()
         socket_info.kind = SOCKET_KIND_UNKNOWN
         socket_info.recv_ready = False
         socket_info.send_ready = False
-        assert socket_info.event_mask == 0, 'Internal data structures are damaged.'
 
     def _epoll_register(self, socket_info, event_mask):
-        event_mask_diff = socket_info.event_mask ^ event_mask
+        # Find all bits in new event mask, which are not present in old event mask
+        # In other words find all 0,1 combinations.
+        event_mask_diff = ~socket_info.event_mask & event_mask
 
-        if event_mask_diff > 0:
+        if event_mask_diff != 0:
             if event_mask_diff & 0x_0001 == 0x_0001: # EPOLLIN
                 self._socket_wait_count += 1
 
@@ -138,9 +140,11 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
                 self._socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
 
     def _epoll_unregister(self, socket_info, event_mask):
+        # Find all bits in new event mask, which are also present in old event mask
+        # In other words find all 1,1 combinations.
         event_mask_diff = socket_info.event_mask & event_mask
 
-        if event_mask_diff > 0:
+        if event_mask_diff != 0:
             if event_mask_diff & 0x_0001 == 0x_0001: # EPOLLIN
                 self._socket_wait_count -= 1
 
