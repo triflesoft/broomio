@@ -118,8 +118,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         socket_info.kind = SOCKET_KIND_UNKNOWN
         socket_info.recv_ready = False
         socket_info.send_ready = False
-        # TODO: assert if zero instead of assigning zero
-        socket_info.event_mask = 0
+        assert socket_info.event_mask == 0, 'Internal data structures are damaged.'
 
     def _epoll_register(self, socket_info, event_mask):
         event_mask_diff = socket_info.event_mask ^ event_mask
@@ -139,7 +138,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
                 self._socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
 
     def _epoll_unregister(self, socket_info, event_mask):
-        event_mask_diff = socket_info.event_mask ^ event_mask
+        event_mask_diff = socket_info.event_mask & event_mask
 
         if event_mask_diff > 0:
             if event_mask_diff & 0x_0001 == 0x_0001: # EPOLLIN
