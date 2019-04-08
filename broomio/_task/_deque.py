@@ -289,7 +289,6 @@ class LoopTaskDeque(object):
                         socket_info.recv_task_info = task_info
                         task_info.recv_fileno = fileno
                         self._socket_task_count += 1
-
                         self._epoll_register(socket_info, 0x_0001) # EPOLLIN
 
                     del socket_info
@@ -352,7 +351,6 @@ class LoopTaskDeque(object):
                             socket_info.send_task_info = task_info
                             task_info.send_fileno = fileno
                             self._socket_task_count += 1
-
                             self._epoll_register(socket_info, 0x_0004) # EPOLLOUT
 
                     del socket_info
@@ -372,7 +370,6 @@ class LoopTaskDeque(object):
                     socket_info.send_task_info = task_info
                     task_info.send_fileno = fileno
                     self._socket_task_count += 1
-
                     self._epoll_register(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                     try:
@@ -396,9 +393,7 @@ class LoopTaskDeque(object):
                     assert task_info.send_fileno is None, 'Task is already waiting for another socket to become writable.'
 
                     sock.listen(backlog)
-
                     socket_info.kind = SOCKET_KIND_SERVER_LISTENING
-
                     self._task_enqueue_old(task_info)
 
                     del socket_info
