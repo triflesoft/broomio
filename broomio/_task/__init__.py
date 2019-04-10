@@ -34,11 +34,10 @@ class Nursery(object):
     @coroutine
     def __aexit__(self, exception_type, exception, traceback):
         if exception_type is None:
-            # Wait for childred to complete.
+            # Wait for all nursery tasks to be finished.
             return (yield SYSCALL_NURSERY_JOIN, self)
         else:
-            # Kill all childred.
-            # TODO: SYSCALL_NURSERY_KILL is not implemented yet.
+            # Cancel all nursery tasks.
             return (yield SYSCALL_NURSERY_KILL, self, exception_type, exception, traceback)
 
     @coroutine

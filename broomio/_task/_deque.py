@@ -43,6 +43,96 @@ SYSCALL_SOCKET_WRITE = set([
 
 
 class LoopTaskDeque(object):
+    def _process_nursery_exception(self, nursery, task_info, exception):
+        if nursery._exception_policy == NurseryExceptionPolicy.Abort:
+            # Save exception
+            nursery._exceptions.append((task_info, exception))
+            # Cancel all child tasks.
+            # Child task is already queued either in _task_deque, _time_heapq or _sock_array.
+            # If child task is already is _task_deque there is no need to add it to _task_deque again.
+            # However if child task is in _time_heapq or _sock_array, it must be removed from there \
+            # and added to _task_deque for throwing an exception.
+            has_time_changes = False
+
+            for child_task_info in nursery._children:
+                # Throw exception in task.
+                child_task_info.throw_exc = TaskAbortError()
+
+                if not child_task_info.recv_fileno is None:
+                    # This task is waiting for socket to become readable.
+                    socket_info = self._get_sock_info(child_task_info.recv_fileno)
+
+                    assert child_task_info == socket_info.recv_task_info, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+
+                    # Unbind task and socket.
+                    child_task_info.recv_fileno = None
+                    socket_info.recv_task_info = None
+                    self._socket_task_count -= 1
+
+                    self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN
+
+                    # Enqueue task.
+                    self._task_enqueue_old(child_task_info)
+
+                    del socket_info
+                elif not child_task_info.send_fileno is None:
+                    # This task is waiting for socket to become writable.
+                    socket_info = self._get_sock_info(child_task_info.send_fileno)
+
+                    assert child_task_info == socket_info.send_task_info, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+
+                    # Unbind task and socket.
+                    child_task_info.send_fileno = None
+                    socket_info.send_task_info = None
+                    self._socket_task_count -= 1
+
+                    self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
+
+                    # Enqueue task.
+                    self._task_enqueue_old(child_task_info)
+
+                    del socket_info
+                else:
+                    try:
+                        # If child was scheduled to run later, cancel that \
+                        # and reschedule task to be run in current tick.
+                        index = 0
+
+                        while index < len(self._time_heapq):
+                            _, time_task_info = self._time_heapq[index]
+
+                            if time_task_info == child_task_info:
+                                self._time_heapq.pop(index)
+                                has_time_changes = True
+                                self._task_enqueue_old(child_task_info)
+                                break
+                            else:
+                                index += 1
+                    except ValueError:
+                        pass
+
+            # HeapQ must be rebuilt.
+            if has_time_changes:
+                heapify(self._time_heapq)
+        elif nursery._exception_policy == NurseryExceptionPolicy.Accumulate:
+            # Save exception
+            nursery._exceptions.append((task_info, exception))
+        elif nursery._exception_policy == NurseryExceptionPolicy.Ignore:
+            pass
+        else:
+            assert False, f'Unexpected nursery exception policy {nursery._exception_policy}.'
+
+    def _notify_nursery_watchers(self, nursery):
+        # Was that task the last nursery child?
+        if len(nursery._children) == 0:
+            # Notify all watchers.
+            for watcher_task_info in nursery._watchers:
+                if nursery._exceptions:
+                    watcher_task_info.throw_exc = NurseryError(nursery._exceptions)
+
+                self._task_enqueue_old(watcher_task_info)
+
+
     def _process_task(self):
         # Cycle while there are tasks ready for execution.
         # New tasks may be enqueued while this loop cycles.
@@ -87,15 +177,8 @@ class LoopTaskDeque(object):
                 # Remove task from nursery.
                 nursery = task_info.nursery
                 nursery._children.remove(task_info)
-
-                # Was that task the last nursery child?
-                if len(nursery._children) == 0:
-                    # Notify all watchers.
-                    for watcher_task_info in nursery._watchers:
-                        if nursery._exceptions:
-                            watcher_task_info.throw_exc = NurseryError(nursery._exceptions)
-
-                        self._task_enqueue_old(watcher_task_info)
+                # Notify watchers
+                self._notify_nursery_watchers(nursery)
 
                 del nursery
             except TaskAbortError:
@@ -105,15 +188,8 @@ class LoopTaskDeque(object):
                 # Remove task from nursery.
                 nursery = task_info.nursery
                 nursery._children.remove(task_info)
-
-                # Was that task the last nursery child?
-                if len(nursery._children) == 0:
-                    # Notify all watchers.
-                    for watcher_task_info in nursery._watchers:
-                        if nursery._exceptions:
-                            watcher_task_info.throw_exc = NurseryError(nursery._exceptions)
-
-                        self._task_enqueue_old(watcher_task_info)
+                # Notify watchers
+                self._notify_nursery_watchers(nursery)
 
                 del nursery
             except Exception as child_exception:
@@ -122,93 +198,10 @@ class LoopTaskDeque(object):
                 nursery = task_info.nursery
                 nursery._children.remove(task_info)
 
-                if nursery._exception_policy == NurseryExceptionPolicy.Abort:
-                    # Save exception
-                    nursery._exceptions.append((task_info, child_exception))
-                    # Cancel all other child tasks.
-                    # Child task is already queued either in _task_deque, _time_heapq or _sock_array.
-                    # If child task is already is _task_deque there is no need to add it to _task_deque again.
-                    # However if child task is in _time_heapq or _sock_array, it must be removed from there \
-                    # and added to _task_deque for throwing an exception.
-                    has_time_changes = False
-
-                    for child_task_info in nursery._children:
-                        # Throw exception in task.
-                        child_task_info.throw_exc = TaskAbortError()
-
-                        if not child_task_info.recv_fileno is None:
-                            # This task is waiting for socket to become readable.
-                            socket_info = self._get_sock_info(child_task_info.recv_fileno)
-
-                            assert child_task_info == socket_info.recv_task_info, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
-
-                            # Unbind task and socket.
-                            child_task_info.recv_fileno = None
-                            socket_info.recv_task_info = None
-                            self._socket_task_count -= 1
-
-                            self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN
-
-                            # Enqueue task.
-                            self._task_enqueue_old(child_task_info)
-
-                            del socket_info
-                        elif not child_task_info.send_fileno is None:
-                            # This task is waiting for socket to become writable.
-                            socket_info = self._get_sock_info(child_task_info.send_fileno)
-
-                            assert child_task_info == socket_info.send_task_info, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
-
-                            # Unbind task and socket.
-                            child_task_info.send_fileno = None
-                            socket_info.send_task_info = None
-                            self._socket_task_count -= 1
-
-                            self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
-
-                            # Enqueue task.
-                            self._task_enqueue_old(child_task_info)
-
-                            del socket_info
-                        else:
-                            try:
-                                # If child was scheduled to run later, cancel that \
-                                # and reschedule task to be run in current tick.
-                                index = 0
-
-                                while index < len(self._time_heapq):
-                                    _, time_task_info = self._time_heapq[index]
-
-                                    if time_task_info == child_task_info:
-                                        self._time_heapq.pop(index)
-                                        has_time_changes = True
-                                        self._task_enqueue_old(child_task_info)
-                                        break
-                                    else:
-                                        index += 1
-                            except ValueError:
-                                pass
-
-                    # HeapQ must be rebuilt.
-                    if has_time_changes:
-                        heapify(self._time_heapq)
-
-                    del has_time_changes
-                elif nursery._exception_policy == NurseryExceptionPolicy.Accumulate:
-                    # Save exception
-                    nursery._exceptions.append((task_info, child_exception))
-                elif nursery._exception_policy == NurseryExceptionPolicy.Ignore:
-                    pass
-                else:
-                    assert False, f'Unexpected nursery exception policy {nursery._exception_policy}.'
-
-                if len(nursery._children) == 0:
-                    # Notify all watchers.
-                    for watcher_task_info in nursery._watchers:
-                        if nursery._exceptions:
-                            watcher_task_info.throw_exc = NurseryError(nursery._exceptions)
-
-                        self._task_enqueue_old(watcher_task_info)
+                # Process exception
+                self._process_nursery_exception(nursery, task_info, child_exception)
+                # Notify watchers
+                self._notify_nursery_watchers(nursery)
 
                 del nursery
 
@@ -233,9 +226,16 @@ class LoopTaskDeque(object):
 
                     del nursery
                 elif task_info.yield_func == SYSCALL_NURSERY_KILL:
-                    # TODO: SYSCALL_NURSERY_KILL is not implemented yet.
-                    # TODO: Cancel all tasks in nursery.
+                    # Cancel all nursery tasks.
                     nursery, exception_type, exception, traceback = task_info.yield_args
+                    # Process exception
+                    self._process_nursery_exception(nursery, task_info, exception)
+                    # Notify watchers
+                    self._notify_nursery_watchers(nursery)
+
+                    # Otherwise enqueue task to be executed in current tick.
+                    task_info.throw_exc = exception
+                    self._task_enqueue_old(task_info)
 
                     del nursery
                     del exception_type
