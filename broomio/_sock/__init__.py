@@ -9,17 +9,15 @@ from .._syscalls import SYSCALL_SOCKET_RECVFROM_INTO
 from .._syscalls import SYSCALL_SOCKET_SEND
 from .._syscalls import SYSCALL_SOCKET_SENDTO
 from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
+from os import strerror
 from socket import AF_INET
 from socket import AF_INET6
 from socket import IPPROTO_TCP
 from socket import IPPROTO_UDP
 from socket import SO_ERROR
-from socket import SO_REUSEADDR
-from socket import SO_REUSEPORT
 from socket import SOCK_DGRAM
 from socket import SOCK_STREAM
 from socket import SOL_SOCKET
-from os import strerror
 from types import coroutine
 
 
@@ -37,8 +35,27 @@ _SOCKET_KINDS = {
     'udp6': (AF_INET6, SOCK_DGRAM,  IPPROTO_UDP),
 }
 
-
 class socket(object):
+    __slots__ = '_socket', '_opt_reuse_addr', '_opt_reuse_port', 'reuse_addr', 'reuse_port'
+
+    def __get_socket_opt_null(self):
+        return False
+
+    def __set_socket_opt_null(self, value):
+        pass
+
+    def __get_socket_opt_addr(self):
+        return bool(self._socket.getsockopt(SOL_SOCKET, self._opt_reuse_addr))
+
+    def __set_socket_opt_addr(self, value):
+        self._socket.setsockopt(SOL_SOCKET, self._opt_reuse_addr, 1 if value else 0)
+
+    def __get_socket_opt_port(self):
+        return bool(self._socket.getsockopt(SOL_SOCKET, self._opt_reuse_port))
+
+    def __set_socket_opt_port(self, value):
+        self._socket.setsockopt(SOL_SOCKET, self._opt_reuse_port, 1 if value else 0)
+
     def __init__(self, kind_name='tcp4', sock=None):
         from socket import socket as _socket
 
@@ -50,20 +67,21 @@ class socket(object):
         else:
             self._socket = sock
 
-    def __get_reuse_addr(self):
-        return bool(self._socket.getsockopt(SOL_SOCKET, SO_REUSEADDR))
+        try:
+            from socket import SO_REUSEADDR
 
-    def __set_reuse_addr(self, value):
-        return self._socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1 if value else 0)
+            self._opt_reuse_addr = SO_REUSEADDR
+            self.reuse_addr = property(self.__get_socket_opt_addr, self.__set_socket_opt_addr)
+        except (ImportError, ModuleNotFoundError):
+            self.reuse_addr = property(self.__get_socket_opt_null, self.__set_socket_opt_null)
 
-    def __get_reuse_port(self):
-        return bool(self._socket.getsockopt(SOL_SOCKET, SO_REUSEPORT))
+        try:
+            from socket import SO_REUSEPORT
 
-    def __set_reuse_port(self, value):
-        return self._socket.setsockopt(SOL_SOCKET, SO_REUSEPORT, 1 if value else 0)
-
-    reuse_addr = property(__get_reuse_addr, __set_reuse_addr)
-    reuse_port = property(__get_reuse_port, __set_reuse_port)
+            self._opt_reuse_port = SO_REUSEPORT
+            self.reuse_port = property(self.__get_socket_opt_port, self.__set_socket_opt_port)
+        except (ImportError, ModuleNotFoundError):
+            self.reuse_port = property(self.__get_socket_opt_null, self.__set_socket_opt_null)
 
     def getpeername(self):
         return self._socket.getpeername()

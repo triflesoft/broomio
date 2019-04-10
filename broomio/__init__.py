@@ -1,6 +1,6 @@
-from ._info import _TaskInfo
-from ._info import _SocketInfo
 from ._info import _SelectFakeEPoll
+from ._info import _SocketInfo
+from ._info import _TaskInfo
 from ._info import SOCKET_KIND_CLIENT_CONNECTION
 from ._info import SOCKET_KIND_SERVER_CONNECTION
 from ._info import SOCKET_KIND_SERVER_LISTENING
@@ -12,6 +12,7 @@ from ._task._deque import LoopTaskDeque
 from ._time import sleep
 from ._time._heapq import LoopTimeHeapQ
 from ._util import _get_coro_stack_frames
+from collections import deque
 from heapq import heappush
 from sys import _getframe
 from time import time
@@ -159,12 +160,6 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
                 self._socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
 
     def __init__(self, technology=None):
-        from collections import deque
-        from resource import getrlimit
-        from resource import RLIMIT_NOFILE
-
-        _, nofile_hard = getrlimit(RLIMIT_NOFILE)
-
         # Deque with tasks ready to be executed.
         # These are new tasks or tasks for which requested syscall completed.
         self._task_deque = deque()
@@ -185,19 +180,33 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         self._time_heapq = []
         self._now = 0
 
-        # For Linux: \
-        # Array of sockets. Indexes in list are file descriptors. O(1) access time.
-        # Why can we do this? Man page socket(2) states:
-        #     The file descriptor returned by a successful call will be \
-        #     the lowest-numbered file descriptor not currently open for the process.
-        # While some indexes will not be used, for instance 0, 1, and 2, because \
-        # they will correspond to file descriptors opened by different means, we \
-        # still may assume values of file descriptors to be small integers.
-        # For Windows \
-        # Dict of sockets. Keys in dict are file descriptors. O(log(N)) access time.
-        # No assumptions about socket file descriptor values' range \
-        # can possibly be deducted from MSDN.
-        self._sock_array = [_SocketInfo(fileno) for fileno in range(nofile_hard)]
+        try:
+            # For Linux: \
+            # Array of sockets. Indexes in list are file descriptors. O(1) access time.
+            # Why can we do this? Man page socket(2) states:
+            #     The file descriptor returned by a successful call will be \
+            #     the lowest-numbered file descriptor not currently open for the process.
+            # While some indexes will not be used, for instance 0, 1, and 2, because \
+            # they will correspond to file descriptors opened by different means, we \
+            # still may assume values of file descriptors to be small integers.
+            from resource import getrlimit
+            from resource import RLIMIT_NOFILE
+
+            _, nofile_hard = getrlimit(RLIMIT_NOFILE)
+            self._sock_array = [_SocketInfo(fileno) for fileno in range(nofile_hard)]
+        except:
+            # For Windows \
+            # Dict of sockets. Keys in dict are file descriptors. O(log(N)) access time.
+            # No assumptions about socket file descriptor values' range \
+            # can possibly be deducted from MSDN.
+            class _SocketDict(dict):
+                def __missing__(self, fileno):
+                    socket_info = _SocketInfo(fileno)
+                    self[fileno] = socket_info
+
+                    return socket_info
+
+            self._sock_array = _SocketDict()
 
         # SPEED: Much faster than declaring method, which calls method.
         # SPEED:
@@ -223,6 +232,8 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         else:
             technologies = ['epoll', 'iocp', 'kqueue', 'poll']
 
+        self._socket_epoll = None
+
         for technology in technologies:
             if technology == 'epoll':
                 try:
@@ -230,7 +241,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
 
                     self._socket_epoll = epoll(1024)
                     break
-                except ModuleNotFoundError:
+                except (ImportError, ModuleNotFoundError):
                     pass
             elif technology == 'poll':
                 try:
@@ -238,7 +249,7 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
 
                     self._socket_epoll = poll()
                     break
-                except ModuleNotFoundError:
+                except (ImportError, ModuleNotFoundError):
                     pass
             elif technology == 'select':
                 self._socket_epoll = _SelectFakeEPoll()
