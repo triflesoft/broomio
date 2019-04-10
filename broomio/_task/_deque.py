@@ -1,6 +1,7 @@
 from . import NurseryError
 from . import NurseryExceptionPolicy
 from . import TaskAbortError
+from .._info import _LoopSlots
 from .._info import SOCKET_KIND_CLIENT_CONNECTION
 from .._info import SOCKET_KIND_SERVER_CONNECTION
 from .._info import SOCKET_KIND_SERVER_LISTENING
@@ -42,7 +43,7 @@ SYSCALL_SOCKET_WRITE = set([
     SYSCALL_SOCKET_SHUTDOWN])
 
 
-class LoopTaskDeque(object):
+class LoopTaskDeque(_LoopSlots):
     def _process_nursery_exception(self, nursery, task_info, exception):
         if nursery._exception_policy == NurseryExceptionPolicy.Abort:
             # Save exception

@@ -4,7 +4,7 @@ from .._info import SOCKET_KIND_CLIENT_CONNECTION
 from .._info import SOCKET_KIND_SERVER_CONNECTION
 from .._info import SOCKET_KIND_SERVER_LISTENING
 from .._info import SOCKET_KIND_UNKNOWN
-from .._util import _get_coro_stack_frames
+from .._info import _LoopSlots
 from .._syscalls import SYSCALL_SOCKET_ACCEPT
 from .._syscalls import SYSCALL_SOCKET_CLOSE
 from .._syscalls import SYSCALL_SOCKET_CONNECT
@@ -16,7 +16,8 @@ from .._syscalls import SYSCALL_SOCKET_SEND
 from .._syscalls import SYSCALL_SOCKET_SENDTO
 from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
 
-class LoopSockEpoll(object):
+
+class LoopSockEpoll(_LoopSlots):
     def _process_sock(self):
         if self._socket_task_count == 0:
             # There are unclosed sockets.

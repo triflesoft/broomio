@@ -1,8 +1,9 @@
+from .._info import _LoopSlots
 from time import sleep as time_sleep
 from heapq import heappop
 
 
-class LoopTimeHeapQ(object):
+class LoopTimeHeapQ(_LoopSlots):
     def _process_time(self):
         # First task in queue.
         moment, task_info = self._time_heapq[0]
