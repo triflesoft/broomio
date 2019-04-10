@@ -226,7 +226,6 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         self._socket_task_count = 0
 
         # Event polling is Linux specific for _now.
-        # TODO: Support select.
         # TODO: Support IOCP.
         # TODO: Support kqueue.
 

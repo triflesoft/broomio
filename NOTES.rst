@@ -18,7 +18,6 @@ Fortunately values of EPOLL* and POLL* are equal in Linux.
     The associated file is available for write(2) operations.
 
 - EPOLLERR / POLLERR == 0x_0008
-    TODO: Process POLLERR event.
     Error condition happened on the associated file descriptor. This event is also reported for the write end of a pipe when the read end has been closed.  epoll_wait(2) will always report for this event; it is not necessary to set it in events.
 
 - EPOLLHUP / POLLHUP == 0x_0010
