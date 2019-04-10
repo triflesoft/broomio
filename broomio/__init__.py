@@ -8,6 +8,8 @@ from ._info import SOCKET_KIND_UNKNOWN
 from ._sock import socket
 from ._sock._epoll import LoopSockEpoll
 from ._task import Nursery
+from ._task import NurseryError
+from ._task import NurseryExceptionPolicy
 from ._task._deque import LoopTaskDeque
 from ._time import sleep
 from ._time._heapq import LoopTimeHeapQ
@@ -19,7 +21,7 @@ from time import time
 from traceback import print_exc
 
 
-__all__ = ['Loop', 'Nursery', 'sleep', 'socket']
+__all__ = ['Loop', 'Nursery', 'NurseryError', 'NurseryExceptionPolicy', 'sleep', 'socket']
 
 
 class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
@@ -170,8 +172,9 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         # SPEED:     self._task_deque.append(task_info)  # THIS IS SLOW
         # SPEED:
 
-        # Also, task order is randomized
-        self._task_enqueue_old = self._task_deque.append if int(time()) % 2 == 0 else self._task_deque.appendleft
+        # TODO: justify determinism
+        #self._task_enqueue_old = self._task_deque.append if int(time()) % 2 == 0 else self._task_deque.appendleft
+        self._task_enqueue_old = self._task_deque.append
 
         # Root nursery.
         self._task_nursery = Nursery()
