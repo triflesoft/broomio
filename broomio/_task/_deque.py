@@ -129,6 +129,7 @@ class LoopTaskDeque(_LoopSlots):
             # Notify all watchers.
             for watcher_task_info in nursery._watchers:
                 if nursery._exceptions:
+                    # TODO: Implement raise NurseryError from nursery._exception[0][1].
                     watcher_task_info.throw_exc = NurseryError(nursery._exceptions)
 
                 self._task_enqueue_old(watcher_task_info)
