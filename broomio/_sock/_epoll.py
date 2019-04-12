@@ -1,10 +1,5 @@
 from . import _get_socket_exception
-from . import socket
-from .._info import SOCKET_KIND_CLIENT_CONNECTION
-from .._info import SOCKET_KIND_SERVER_CONNECTION
-from .._info import SOCKET_KIND_SERVER_LISTENING
-from .._info import SOCKET_KIND_UNKNOWN
-from .._info import _LoopSlots
+from .._sock import SOCKET_KIND_CLIENT_CONNECTION
 from .._syscalls import SYSCALL_SOCKET_ACCEPT
 from .._syscalls import SYSCALL_SOCKET_CLOSE
 from .._syscalls import SYSCALL_SOCKET_CONNECT
@@ -15,6 +10,7 @@ from .._syscalls import SYSCALL_SOCKET_RECVFROM_INTO
 from .._syscalls import SYSCALL_SOCKET_SEND
 from .._syscalls import SYSCALL_SOCKET_SENDTO
 from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
+from .._util import _LoopSlots
 
 
 class LoopSockEpoll(_LoopSlots):

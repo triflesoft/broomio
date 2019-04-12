@@ -1,9 +1,8 @@
-from .._info import _LoopSlots
-from .._info import _TaskInfo
+from .._task import _TaskInfo
 from .._task import Nursery
-from .._task import TaskAbortError
-from time import sleep as time_sleep
+from .._util import _LoopSlots
 from heapq import heappop
+from time import sleep as time_sleep
 
 
 class LoopTimeHeapQ(_LoopSlots):

@@ -1,12 +1,6 @@
 from . import NurseryError
 from . import NurseryExceptionPolicy
-from . import TaskAbortError
-from .._info import _LoopSlots
-from .._info import SOCKET_KIND_CLIENT_CONNECTION
-from .._info import SOCKET_KIND_SERVER_CONNECTION
-from .._info import SOCKET_KIND_SERVER_LISTENING
-from .._info import SOCKET_KIND_UNKNOWN
-from .._sock import socket
+from .._sock import SOCKET_KIND_SERVER_LISTENING
 from .._syscalls import SYSCALL_NURSERY_INIT
 from .._syscalls import SYSCALL_NURSERY_JOIN
 from .._syscalls import SYSCALL_NURSERY_KILL
@@ -25,6 +19,7 @@ from .._syscalls import SYSCALL_SOCKET_SENDTO
 from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
 from .._syscalls import SYSCALL_TASK_SLEEP
 from .._util import _get_coro_stack_frames
+from .._util import _LoopSlots
 from heapq import heapify
 from heapq import heappush
 from types import TracebackType
@@ -42,6 +37,10 @@ SYSCALL_SOCKET_WRITE = set([
     SYSCALL_SOCKET_SEND,
     SYSCALL_SOCKET_SENDTO,
     SYSCALL_SOCKET_SHUTDOWN])
+
+
+class TaskAbortError(BaseException):
+    pass
 
 
 class LoopTaskDeque(_LoopSlots):
