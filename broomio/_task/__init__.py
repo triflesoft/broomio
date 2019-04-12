@@ -5,6 +5,7 @@ from .._syscalls import SYSCALL_NURSERY_START_SOON
 from enum import Enum
 from types import coroutine
 
+
 class NurseryExceptionPolicy(Enum):
     Abort = 1
     Accumulate = 2

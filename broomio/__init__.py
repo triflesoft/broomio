@@ -193,5 +193,3 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
 
         if len(self._task_nursery._exceptions) > 0:
             raise NurseryError(self._task_nursery._exceptions) from self._task_nursery._exceptions[0][1]
-
-

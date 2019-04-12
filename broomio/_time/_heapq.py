@@ -25,4 +25,3 @@ class LoopTimeHeapQ(_LoopSlots):
         del moment
 
         return True
-

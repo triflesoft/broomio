@@ -154,4 +154,3 @@ class LoopSockEpoll(_LoopSlots):
             del socket_info
 
         return True
-
