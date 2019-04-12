@@ -64,7 +64,7 @@ async def connection_handler(client_socket, client_address):
         parser.feed_data(chunk)
 
     template = environment.get_template('http-server.html')
-    body_text = template.render({'system': 'fastio..', 'address': client_address, 'datetime': datetime.now()})
+    body_text = template.render({'address': client_address, 'datetime': datetime.now()})
     body_data = body_text.encode('utf-8')
     response = (HEAD_TEMPLATE % len(body_data)) + body_data
 
