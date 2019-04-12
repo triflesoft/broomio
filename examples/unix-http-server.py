@@ -75,10 +75,10 @@ async def connection_handler(client_socket, client_address):
     await client_socket.close()
 
 async def listener():
-    server_socket = socket()
+    server_socket = socket('unix')
     server_socket.reuse_addr = True
     server_socket.reuse_port = True
-    server_socket.bind(('0.0.0.0', 7777))
+    server_socket.bind('/tmp/http-server')
     await server_socket.listen(1024)
 
     async with Nursery() as nursery:
@@ -89,4 +89,3 @@ async def listener():
 loop = Loop()
 loop.start_soon(listener())
 loop.run()
-
