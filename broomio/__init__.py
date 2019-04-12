@@ -21,14 +21,14 @@ __all__ = ['Loop', 'Nursery', 'NurseryError', 'NurseryExceptionPolicy', 'sleep',
 
 
 class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
-    def _task_enqueue_new(self, coro, parent_task_info, stack_frames, nursery):
-        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, nursery)
-        nursery._children.add(child_task_info)
+    def _task_enqueue_new(self, coro, parent_task_info, stack_frames, parent_nursery):
+        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, parent_nursery)
+        parent_nursery._children.add(child_task_info)
         self._task_enqueue_old(child_task_info)
 
-    def _task_enqueue_new_delay(self, coro, parent_task_info, stack_frames, nursery, delay):
-        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, nursery)
-        nursery._children.add(child_task_info)
+    def _task_enqueue_new_delay(self, coro, parent_task_info, stack_frames, parent_nursery, delay):
+        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, parent_nursery)
+        parent_nursery._children.add(child_task_info)
         heappush(self._time_heapq, (self._now + delay, child_task_info))
 
     def _sock_accept(self, task_info, socket_info):

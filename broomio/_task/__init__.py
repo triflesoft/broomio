@@ -1,3 +1,4 @@
+from .._syscalls import SYSCALL_NURSERY_INIT
 from .._syscalls import SYSCALL_NURSERY_JOIN
 from .._syscalls import SYSCALL_NURSERY_KILL
 from .._syscalls import SYSCALL_NURSERY_START_LATER
@@ -35,9 +36,10 @@ class Nursery(object):
         self._exception_policy = exception_policy
         self._exceptions = []
 
-    async def __aenter__(self):
-        # Nothing to do here.
-        return self
+    @coroutine
+    def __aenter__(self):
+        # Create new nursery
+        return (yield SYSCALL_NURSERY_INIT, self)
 
     @coroutine
     def __aexit__(self, exception_type, exception, traceback):

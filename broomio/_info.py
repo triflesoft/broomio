@@ -14,9 +14,9 @@ class _TaskInfo(object):
         'send_args', 'throw_exc', \
         'parent_task_info', 'stack_frames', \
         'recv_fileno', 'send_fileno', \
-        'nursery'
+        'parent_nursery', 'child_nursery'
 
-    def __init__(self, coro, parent_task_info, stack_frames, nursery):
+    def __init__(self, coro, parent_task_info, stack_frames, parent_nursery):
         # Coroutine to be executed.
         self.coro = coro
         # Syscall function coroutine requested.
@@ -27,7 +27,7 @@ class _TaskInfo(object):
         self.send_args = None
         # Exception to be passed to coroutine.
         self.throw_exc = None
-        # Parent task, the one from which nursery.start_soon nursery.start_later was called.
+        # Parent task, the one from which nursery.start_soon or nursery.start_later was called.
         self.parent_task_info = parent_task_info
         # Stack frames.
         self.stack_frames = stack_frames
@@ -37,8 +37,31 @@ class _TaskInfo(object):
         # Socket descriptor for which task is waiting to become writable.
         # Only one of recv_fileno and send_fileno may be set.
         self.send_fileno = None
-        # Nursery to which task belongs.
-        self.nursery = nursery
+        # Nursery to which this task belongs.
+        self.parent_nursery = parent_nursery
+        # Nursery created from this task.
+        self.child_nursery = None
+
+    def __lt__(self, other):
+        return id(self) < id(other)
+
+    def __le__(self, other):
+        return id(self) <= id(other)
+
+    def __eq__(self, other):
+        return id(self) == id(other)
+
+    def __ne__(self, other):
+        return id(self) != id(other)
+
+    def __gt__(self, other):
+        return id(self) > id(other)
+
+    def __ge__(self, other):
+        return id(self) >= id(other)
+
+    def __hash__(self):
+        return id(self)
 
 
 #
