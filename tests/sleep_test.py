@@ -68,6 +68,7 @@ class TestSleep(TestCase):
                 async with Nursery() as nursery:
                     await nursery.start_soon(child1(vars, 1))
                     await nursery.start_later(child2(vars, 2), 1)
+            except:
                 pass
             finally:
                 vars['parent_till'] = time()
