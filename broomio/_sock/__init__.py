@@ -21,6 +21,8 @@ from socket import SO_ERROR
 from socket import SOCK_DGRAM
 from socket import SOCK_STREAM
 from socket import SOL_SOCKET
+from struct import calcsize
+from struct import unpack
 from types import coroutine
 
 
@@ -39,26 +41,40 @@ _SOCKET_KINDS = {
     'udp6': (AF_INET6, SOCK_DGRAM,  IPPROTO_UDP),
 }
 
+
 class socket(object):
-    __slots__ = '_socket', '_opt_reuse_addr', '_opt_reuse_port', '_kind_name', 'reuse_addr', 'reuse_port'
+    __slots__ = '_socket', '_kind_name'
 
-    def __get_socket_opt_null(self):
-        return False
+    def __get_socket_opt_reuse_addr(self):
+        if self._opt_reuse_addr:
+            return bool(self._socket.getsockopt(SOL_SOCKET, self._opt_reuse_addr))
+        else:
+            return False
 
-    def __set_socket_opt_null(self, value):
-        pass
+    def __set_socket_opt_reuse_addr(self, value):
+        if self._opt_reuse_addr:
+            self._socket.setsockopt(SOL_SOCKET, self._opt_reuse_addr, 1 if value else 0)
 
-    def __get_socket_opt_addr(self):
-        return bool(self._socket.getsockopt(SOL_SOCKET, self._opt_reuse_addr))
+    def __get_socket_opt_reuse_port(self):
+        if self._opt_reuse_port:
+            return bool(self._socket.getsockopt(SOL_SOCKET, self._opt_reuse_port))
+        else:
+            return False
 
-    def __set_socket_opt_addr(self, value):
-        self._socket.setsockopt(SOL_SOCKET, self._opt_reuse_addr, 1 if value else 0)
+    def __set_socket_opt_reuse_port(self, value):
+        if self._opt_reuse_port:
+            self._socket.setsockopt(SOL_SOCKET, self._opt_reuse_port, 1 if value else 0)
 
-    def __get_socket_opt_port(self):
-        return bool(self._socket.getsockopt(SOL_SOCKET, self._opt_reuse_port))
+    def __get_socket_opt_peer_cred(self):
+        if self._opt_peer_cred:
+            # TODO: pid, uid, gid order may not be respected by non-Linux *nixes.
+            credentials = self._socket.getsockopt(SOL_SOCKET, self._opt_peer_cred, calcsize("3i"))
 
-    def __set_socket_opt_port(self, value):
-        self._socket.setsockopt(SOL_SOCKET, self._opt_reuse_port, 1 if value else 0)
+            return unpack("3i", credentials)
+
+    reuse_addr = property(__get_socket_opt_reuse_addr, __set_socket_opt_reuse_addr)
+    reuse_port = property(__get_socket_opt_reuse_port, __set_socket_opt_reuse_port)
+    peer_cred = property(__get_socket_opt_peer_cred)
 
     def __init__(self, kind_name='tcp4', sock=None):
         from socket import socket as _socket
@@ -72,22 +88,6 @@ class socket(object):
             self._socket.setblocking(False)
         else:
             self._socket = sock
-
-        try:
-            from socket import SO_REUSEADDR
-
-            self._opt_reuse_addr = SO_REUSEADDR
-            self.reuse_addr = property(self.__get_socket_opt_addr, self.__set_socket_opt_addr)
-        except ImportError:
-            self.reuse_addr = property(self.__get_socket_opt_null, self.__set_socket_opt_null)
-
-        try:
-            from socket import SO_REUSEPORT
-
-            self._opt_reuse_port = SO_REUSEPORT
-            self.reuse_port = property(self.__get_socket_opt_port, self.__set_socket_opt_port)
-        except ImportError:
-            self.reuse_port = property(self.__get_socket_opt_null, self.__set_socket_opt_null)
 
     def getpeername(self):
         return self._socket.getpeername()
@@ -148,3 +148,27 @@ class socket(object):
     @coroutine
     def shutdown(self, how):
         return (yield SYSCALL_SOCKET_SHUTDOWN, self._socket, how)
+
+
+try:
+    from socket import SO_REUSEADDR
+
+    socket._opt_reuse_addr = SO_REUSEADDR
+except ImportError:
+    socket._opt_reuse_addr = None
+
+try:
+    from socket import SO_REUSEPORT
+
+    socket._opt_reuse_port = SO_REUSEPORT
+except ImportError:
+    socket._opt_reuse_port = None
+
+try:
+    # TODO: Some OSes support SO_PEERCRED while Python's socket module does not export this constant
+    # TODO: They say SO_PEERCRED equals 17 on most x86/x64 Linuxes
+    from socket import SO_PEERCRED
+
+    socket._opt_peer_cred = SO_PEERCRED
+except ImportError:
+    socket._opt_peer_cred = None
