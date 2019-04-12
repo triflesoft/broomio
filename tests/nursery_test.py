@@ -122,13 +122,48 @@ class TestNursery(TestCase):
             except Exception:
                 pass
 
-
         vars = {}
         loop = Loop()
         loop.start_soon(parent(vars))
         loop.run()
         self.assertEqual(vars['count_enter'], 6)
         self.assertEqual(vars['count_exit'], 2)
+
+    def test_timeout(self):
+        async def child2(vars, delay):
+            print("ENTER child2")
+            vars['count_enter'] += 1
+            await sleep(delay)
+            vars['count_exit'] += 1
+            print("EXIT child2")
+
+        async def child1(vars):
+            print("ENTER child1")
+            vars['count_enter'] += 1
+
+            async with Nursery() as nursery:
+                await nursery.start_soon(child2(vars, 0.3))
+                await nursery.start_soon(child2(vars, 0.1))
+
+            vars['count_exit'] += 1
+            print("EXIT child1")
+
+        async def parent(vars):
+            vars['count_enter'] = 0
+            vars['count_exit'] = 0
+
+            try:
+                async with Nursery(timeout=0.2) as nursery:
+                    await nursery.start_soon(child1(vars))
+            except Exception:
+                pass
+
+        vars = {}
+        loop = Loop()
+        loop.start_soon(parent(vars))
+        loop.run()
+        self.assertEqual(vars['count_enter'], 3)
+        self.assertEqual(vars['count_exit'], 1)
 
 
 if __name__ == '__main__':

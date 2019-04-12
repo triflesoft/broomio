@@ -1,4 +1,7 @@
 from .._info import _LoopSlots
+from .._info import _TaskInfo
+from .._task import Nursery
+from .._task import TaskAbortError
 from time import sleep as time_sleep
 from heapq import heappop
 
@@ -6,7 +9,7 @@ from heapq import heappop
 class LoopTimeHeapQ(_LoopSlots):
     def _process_time(self):
         # First task in queue.
-        moment, task_info = self._time_heapq[0]
+        moment, _ = self._time_heapq[0]
 
         # Is task scheduled to run later?
         if self._now < moment:
@@ -18,10 +21,13 @@ class LoopTimeHeapQ(_LoopSlots):
 
         # Run all tasks which are ready to run.
         while (len(self._time_heapq) > 0) and (self._now >= self._time_heapq[0][0]):
-            _, task_info = heappop(self._time_heapq)
-            self._task_enqueue_old(task_info)
+            _, element = heappop(self._time_heapq)
 
-        del task_info
-        del moment
+            if type(element) is _TaskInfo:
+                self._task_enqueue_old(element)
+            elif type(element) is Nursery:
+                self._nursery_abort_children(element)
+            else:
+                assert False, 'Unexpected time heapq element.'
 
         return True

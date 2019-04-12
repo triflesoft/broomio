@@ -30,11 +30,13 @@ class TaskAbortError(BaseException):
 
 
 class Nursery(object):
-    def __init__(self, exception_policy=NurseryExceptionPolicy.Abort):
+    def __init__(self, exception_policy=NurseryExceptionPolicy.Abort, timeout=-1):
         self._children = set()
         self._watchers = set()
         self._exception_policy = exception_policy
         self._exceptions = []
+        self._timeout = timeout
+        self._task_info = None
 
     @coroutine
     def __aenter__(self):

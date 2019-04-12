@@ -45,7 +45,7 @@ SYSCALL_SOCKET_WRITE = set([
 
 
 class LoopTaskDeque(_LoopSlots):
-    def _abort_nursery_children(self, nursery):
+    def _nursery_abort_children(self, nursery):
         # Child task is already queued either in _task_deque, _time_heapq or _sock_array.
         # If child task is already is _task_deque there is no need to add it to _task_deque again.
         # However if child task is in _time_heapq or _sock_array, it must be removed from there \
@@ -54,7 +54,7 @@ class LoopTaskDeque(_LoopSlots):
 
         for child_task_info in nursery._children:
             if child_task_info.child_nursery:
-                self._abort_nursery_children(child_task_info.child_nursery)
+                self._nursery_abort_children(child_task_info.child_nursery)
 
             # Throw exception in task.
             child_task_info.throw_exc = TaskAbortError()
@@ -116,12 +116,12 @@ class LoopTaskDeque(_LoopSlots):
         if has_time_changes:
             heapify(self._time_heapq)
 
-    def _process_nursery_exception(self, nursery, task_info, exception):
+    def _nursery_process_exception(self, nursery, task_info, exception):
         if nursery._exception_policy == NurseryExceptionPolicy.Abort:
             # Save exception
             nursery._exceptions.append((task_info, exception))
             # Cancel all child tasks.
-            self._abort_nursery_children(nursery)
+            self._nursery_abort_children(nursery)
         elif nursery._exception_policy == NurseryExceptionPolicy.Accumulate:
             # Save exception
             nursery._exceptions.append((task_info, exception))
@@ -130,7 +130,7 @@ class LoopTaskDeque(_LoopSlots):
         else:
             assert False, f'Unexpected nursery exception policy {nursery._exception_policy}.'
 
-    def _notify_nursery_watchers(self, nursery):
+    def _nursery_notify_watchers(self, nursery):
         # Was that task the last nursery child?
         if len(nursery._children) == 0:
             # Notify all watchers.
@@ -197,7 +197,7 @@ class LoopTaskDeque(_LoopSlots):
                 parent_nursery = task_info.parent_nursery
                 parent_nursery._children.remove(task_info)
                 # Notify watchers
-                self._notify_nursery_watchers(parent_nursery)
+                self._nursery_notify_watchers(parent_nursery)
 
                 del parent_nursery
             except TaskAbortError:
@@ -208,7 +208,7 @@ class LoopTaskDeque(_LoopSlots):
                 parent_nursery = task_info.parent_nursery
                 parent_nursery._children.remove(task_info)
                 # Notify watchers
-                self._notify_nursery_watchers(parent_nursery)
+                self._nursery_notify_watchers(parent_nursery)
 
                 del parent_nursery
             except Exception as child_exception:
@@ -218,9 +218,9 @@ class LoopTaskDeque(_LoopSlots):
                 parent_nursery._children.remove(task_info)
 
                 # Process exception
-                self._process_nursery_exception(parent_nursery, task_info, child_exception)
+                self._nursery_process_exception(parent_nursery, task_info, child_exception)
                 # Notify watchers
-                self._notify_nursery_watchers(parent_nursery)
+                self._nursery_notify_watchers(parent_nursery)
 
                 del parent_nursery
 
@@ -241,9 +241,13 @@ class LoopTaskDeque(_LoopSlots):
                 elif task_info.yield_func == SYSCALL_NURSERY_INIT:
                     # Wait for all nursery tasks to be finished.
                     nursery = task_info.yield_args[0]
+                    nursery._task_info = task_info
                     task_info.child_nursery = nursery
                     task_info.send_args = nursery
                     self._task_enqueue_old(task_info)
+
+                    if nursery._timeout > 0:
+                        heappush(self._time_heapq, (self._now + nursery._timeout, nursery))
 
                     del nursery
                 elif task_info.yield_func == SYSCALL_NURSERY_JOIN:
@@ -256,9 +260,9 @@ class LoopTaskDeque(_LoopSlots):
                     # Cancel all nursery tasks.
                     nursery, exception_type, exception, traceback = task_info.yield_args
                     # Process exception
-                    self._process_nursery_exception(nursery, task_info, exception)
+                    self._nursery_process_exception(nursery, task_info, exception)
                     # Notify watchers
-                    self._notify_nursery_watchers(nursery)
+                    self._nursery_notify_watchers(nursery)
 
                     # Enqueue task to be executed in current tick.
                     task_info.throw_exc = exception
