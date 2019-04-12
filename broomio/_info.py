@@ -235,7 +235,7 @@ class _LoopSlots(object):
 
                     self._socket_epoll = epoll(1024)
                     break
-                except (ImportError, ModuleNotFoundError):
+                except ImportError:
                     pass
             elif technology == 'poll':
                 try:
@@ -243,7 +243,7 @@ class _LoopSlots(object):
 
                     self._socket_epoll = poll()
                     break
-                except (ImportError, ModuleNotFoundError):
+                except ImportError:
                     pass
             elif technology == 'select':
                 self._socket_epoll = _SelectFakeEPoll()

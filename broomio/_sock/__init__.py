@@ -9,9 +9,12 @@ from .._syscalls import SYSCALL_SOCKET_RECVFROM_INTO
 from .._syscalls import SYSCALL_SOCKET_SEND
 from .._syscalls import SYSCALL_SOCKET_SENDTO
 from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
+from os import path
 from os import strerror
+from os import unlink
 from socket import AF_INET
 from socket import AF_INET6
+from socket import AF_UNIX
 from socket import IPPROTO_TCP
 from socket import IPPROTO_UDP
 from socket import SO_ERROR
@@ -29,6 +32,7 @@ def _get_socket_exception(socket):
 
 
 _SOCKET_KINDS = {
+    'unix': (AF_UNIX,  SOCK_STREAM, -1),
     'tcp4': (AF_INET,  SOCK_STREAM, IPPROTO_TCP),
     'udp4': (AF_INET,  SOCK_DGRAM,  IPPROTO_UDP),
     'tcp6': (AF_INET6, SOCK_STREAM, IPPROTO_TCP),
@@ -36,7 +40,7 @@ _SOCKET_KINDS = {
 }
 
 class socket(object):
-    __slots__ = '_socket', '_opt_reuse_addr', '_opt_reuse_port', 'reuse_addr', 'reuse_port'
+    __slots__ = '_socket', '_opt_reuse_addr', '_opt_reuse_port', '_kind_name', 'reuse_addr', 'reuse_port'
 
     def __get_socket_opt_null(self):
         return False
@@ -61,6 +65,8 @@ class socket(object):
 
         kind = _SOCKET_KINDS[kind_name]
 
+        self._kind_name = kind_name
+
         if sock is None:
             self._socket = _socket(kind[0], kind[1], kind[2])
             self._socket.setblocking(False)
@@ -72,7 +78,7 @@ class socket(object):
 
             self._opt_reuse_addr = SO_REUSEADDR
             self.reuse_addr = property(self.__get_socket_opt_addr, self.__set_socket_opt_addr)
-        except (ImportError, ModuleNotFoundError):
+        except ImportError:
             self.reuse_addr = property(self.__get_socket_opt_null, self.__set_socket_opt_null)
 
         try:
@@ -80,7 +86,7 @@ class socket(object):
 
             self._opt_reuse_port = SO_REUSEPORT
             self.reuse_port = property(self.__get_socket_opt_port, self.__set_socket_opt_port)
-        except (ImportError, ModuleNotFoundError):
+        except ImportError:
             self.reuse_port = property(self.__get_socket_opt_null, self.__set_socket_opt_null)
 
     def getpeername(self):
@@ -90,6 +96,13 @@ class socket(object):
         return self._socket.getsockname()
 
     def bind(self, addr):
+        if self._kind_name == 'unix':
+            try:
+                unlink(addr)
+            except:
+                if path.exists(addr):
+                    raise
+
         self._socket.bind(addr)
 
     @coroutine
