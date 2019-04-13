@@ -338,8 +338,8 @@ class LoopTaskDeque(_LoopSlots):
                         # Socket is not yet ready for reading.
                         # Bind task and socket.
                         socket_info.recv_task_info = task_info
-                        task_info.recv_fileno = fileno
                         self._socket_task_count += 1
+                        task_info.recv_fileno = fileno
                         self._epoll_register(socket_info, 0x_0001) # EPOLLIN
 
                     del socket_info
@@ -400,8 +400,8 @@ class LoopTaskDeque(_LoopSlots):
                             # Socket is not yet ready for writing.
                             # Bind task and socket.
                             socket_info.send_task_info = task_info
-                            task_info.send_fileno = fileno
                             self._socket_task_count += 1
+                            task_info.send_fileno = fileno
                             self._epoll_register(socket_info, 0x_0004) # EPOLLOUT
 
                     del socket_info
@@ -419,8 +419,8 @@ class LoopTaskDeque(_LoopSlots):
 
                     # Bind task and socket.
                     socket_info.send_task_info = task_info
-                    task_info.send_fileno = fileno
                     self._socket_task_count += 1
+                    task_info.send_fileno = fileno
                     self._epoll_register(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                     try:

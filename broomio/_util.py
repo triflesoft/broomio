@@ -88,7 +88,7 @@ class _LoopSlots(object):
         # If socket is awaited to become readable and writable, it will be counted twice.
         self._socket_wait_count = 0
 
-        # Number of task awaiting for sockets to become readable or writable.
+        # Number of tasks awaiting for sockets to become readable or writable.
         self._socket_task_count = 0
 
         # Event polling is Linux specific for _now.
