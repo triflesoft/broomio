@@ -6,7 +6,6 @@ from ._task import NurseryExceptionPolicy
 from ._task._deque import LoopTaskDeque
 from ._time import sleep
 from ._time._heapq import LoopTimeHeapQ
-from heapq import heappush
 from sys import _getframe
 from time import time
 
