@@ -187,8 +187,6 @@ class LoopSockEpoll(_LoopSlots):
                     socket_info.recv_task_info = None
                     self._socket_task_count -= 1
 
-                self._sock_close(sock, socket_info)
-
                 del exception
                 del sock
             else:
