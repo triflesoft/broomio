@@ -18,7 +18,7 @@ class TestScheduler(TestCase):
         order = []
 
         async def child(index):
-            await sleep(index / 100.0)
+            await sleep(index / 10.0)
             order.append(index)
 
         loop = Loop()

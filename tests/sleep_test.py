@@ -40,11 +40,11 @@ class TestSleep(TestCase):
         child_1_duration = fabs(vars['child_1_till'] - vars['child_1_from'])
         child_2_duration = fabs(vars['child_2_till'] - vars['child_2_from'])
 
-        self.assertAlmostEqual(parent_duration,  3.0, 2)
-        self.assertAlmostEqual(child_1_offset,   0.0, 2)
-        self.assertAlmostEqual(child_2_offset,   1.0, 2)
-        self.assertAlmostEqual(child_1_duration, 2.0, 2)
-        self.assertAlmostEqual(child_2_duration, 2.0, 2)
+        self.assertAlmostEqual(parent_duration,  3.0, 1)
+        self.assertAlmostEqual(child_1_offset,   0.0, 1)
+        self.assertAlmostEqual(child_2_offset,   1.0, 1)
+        self.assertAlmostEqual(child_1_duration, 2.0, 1)
+        self.assertAlmostEqual(child_2_duration, 2.0, 1)
 
     def test_sleep_failure(self):
         async def child1(vars, index):
@@ -84,11 +84,11 @@ class TestSleep(TestCase):
         child_1_duration = fabs(vars['child_1_till'] - vars['child_1_from'])
         child_2_duration = fabs(vars['child_2_till'] - vars['child_2_from'])
 
-        self.assertAlmostEqual(parent_duration,  1.0, 2)
-        self.assertAlmostEqual(child_1_offset,   0.0, 2)
-        self.assertAlmostEqual(child_2_offset,   1.0, 2)
-        self.assertAlmostEqual(child_1_duration, 1.0, 2)
-        self.assertAlmostEqual(child_2_duration, 0.0, 2)
+        self.assertAlmostEqual(parent_duration,  1.0, 1)
+        self.assertAlmostEqual(child_1_offset,   0.0, 1)
+        self.assertAlmostEqual(child_2_offset,   1.0, 1)
+        self.assertAlmostEqual(child_1_duration, 1.0, 1)
+        self.assertAlmostEqual(child_2_duration, 0.0, 1)
 
 
 if __name__ == '__main__':
