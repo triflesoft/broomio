@@ -69,7 +69,6 @@ class LoopTaskDeque(_LoopSlots):
                 child_task_info.recv_fileno = None
                 socket_info.recv_task_info = None
                 self._socket_task_count -= 1
-
                 self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN
 
                 # Enqueue task.
@@ -86,7 +85,6 @@ class LoopTaskDeque(_LoopSlots):
                 child_task_info.send_fileno = None
                 socket_info.send_task_info = None
                 self._socket_task_count -= 1
-
                 self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
 
                 # Enqueue task.
@@ -395,10 +393,9 @@ class LoopTaskDeque(_LoopSlots):
                     else:
                         if (task_info.yield_func == SYSCALL_SOCKET_CLOSE) and (socket_info.kind == SOCKET_KIND_SERVER_LISTENING):
                             # Close socket.
-                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
-
                             socket_info.send_task_info = None
                             self._socket_task_count -= 1
+                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
                             if socket_info.recv_task_info:
                                 socket_info.recv_task_info.recv_fileno = None
