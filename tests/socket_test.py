@@ -6,6 +6,7 @@ from broomio import sleep
 from broomio import socket
 from socket import AF_INET
 from socket import AF_INET6
+from socket import AF_UNIX
 from socket import SOCK_DGRAM
 from socket import SOCK_STREAM
 from tracemalloc import start
@@ -31,11 +32,15 @@ class TestSocket(TestCase):
             udp6_socket = socket('udp6')
             self.assertEqual(udp6_socket._socket.family, AF_INET6)
             self.assertEqual(udp6_socket._socket.type, SOCK_DGRAM)
+            unix_socket = socket('unix')
+            self.assertEqual(unix_socket._socket.family, AF_UNIX)
+            self.assertEqual(unix_socket._socket.type, SOCK_STREAM)
 
             await tcp4_socket.close()
             await tcp6_socket.close()
             await udp4_socket.close()
             await udp6_socket.close()
+            await unix_socket.close()
 
         loop = Loop()
         loop.start_soon(create())

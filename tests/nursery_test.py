@@ -53,7 +53,7 @@ class TestNursery(TestCase):
         self.assertNotIn('exception_number', vars)
 
     def test_exception_handling(self):
-        async def child(vars, delay, x, y):
+        async def child(vars, delay):
             vars['count_enter'] += 1
             await sleep(delay)
             vars['count_exit'] += 1
@@ -64,8 +64,8 @@ class TestNursery(TestCase):
 
             try:
                 async with Nursery() as nursery:
-                    await nursery.start_soon(child(vars, 0.1, 1, 2))
-                    await nursery.start_soon(child(vars, 0.3, 1, 2))
+                    await nursery.start_soon(child(vars, 0.1))
+                    await nursery.start_soon(child(vars, 0.3))
                     await sleep(0.2)
                     raise Exception("STOP ALL")
             except Exception:
@@ -80,7 +80,7 @@ class TestNursery(TestCase):
         self.assertEqual(vars['count_exit'], 1)
 
     def test_nested_exception_handling(self):
-        # Timeline without interruption
+        # Execution timeline
         #      0.0 0.1 0.2 0.3 0.4 0.5 0.6
         # 1a    |***|***|***|***!***|   |
         # 1a/2a |   |***|***|***!***|   |
@@ -89,7 +89,7 @@ class TestNursery(TestCase):
         # 1b/2c |   |   |***|***!***|***|
         # 1b/2c |   |   |***|   !   |   |
         # Execution will be interrupted at 0.4s,
-        # thus there should be 6 ins and 2 outs.
+        # thus there should be 6 enters and 2 exits.
         async def child2(vars, delay):
             vars['count_enter'] += 1
             await sleep(delay)
@@ -131,14 +131,11 @@ class TestNursery(TestCase):
 
     def test_timeout(self):
         async def child2(vars, delay):
-            print("ENTER child2")
             vars['count_enter'] += 1
             await sleep(delay)
             vars['count_exit'] += 1
-            print("EXIT child2")
 
         async def child1(vars):
-            print("ENTER child1")
             vars['count_enter'] += 1
 
             async with Nursery() as nursery:
@@ -146,7 +143,6 @@ class TestNursery(TestCase):
                 await nursery.start_soon(child2(vars, 0.1))
 
             vars['count_exit'] += 1
-            print("EXIT child1")
 
         async def parent(vars):
             vars['count_enter'] = 0
