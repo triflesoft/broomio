@@ -9,6 +9,7 @@ from socket import AF_INET6
 from socket import AF_UNIX
 from socket import SOCK_DGRAM
 from socket import SOCK_STREAM
+from time import time
 from tracemalloc import start
 from unittest import main
 from unittest import TestCase
@@ -47,18 +48,27 @@ class TestSocket(TestCase):
         loop.run()
 
     def test_socket_timeout(self):
-        async def client_connect():
+        async def client_connect(vars):
+            vars['enter'] = time()
+
             client_socket = socket()
 
-            try:
-                #await client_socket.connect(('169.254.0.1', 65534))
-                pass
-            finally:
-                await client_socket.close()
+            async with Nursery(timeout=1):
+                try:
+                    await client_socket.connect(('169.254.0.1', 65534))
+                except BaseException:
+                    pass
+                finally:
+                    await client_socket.close()
 
+            vars['exit'] = time()
+
+        vars = {}
         loop = Loop()
-        loop.start_soon(client_connect())
+        loop.start_soon(client_connect(vars))
         loop.run()
+
+        self.assertAlmostEqual(vars['exit'] - vars['enter'], 1, 1)
 
     def test_socket_listen_connect(self):
         async def server_client_handler(client_socket2, client_address):
