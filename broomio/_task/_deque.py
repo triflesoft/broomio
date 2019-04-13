@@ -1,5 +1,6 @@
 from . import NurseryError
 from . import NurseryExceptionPolicy
+from . import _TaskInfo
 from .._sock import SOCKET_KIND_SERVER_LISTENING
 from .._syscalls import SYSCALL_NURSERY_INIT
 from .._syscalls import SYSCALL_NURSERY_JOIN
@@ -150,6 +151,16 @@ class LoopTaskDeque(_LoopSlots):
 
                 self._task_enqueue_old(watcher_task_info)
 
+
+    def _task_enqueue_new(self, coro, parent_task_info, stack_frames, parent_nursery):
+        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, parent_nursery)
+        parent_nursery._children.add(child_task_info)
+        self._task_enqueue_old(child_task_info)
+
+    def _task_enqueue_new_delay(self, coro, parent_task_info, stack_frames, parent_nursery, delay):
+        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, parent_nursery)
+        parent_nursery._children.add(child_task_info)
+        heappush(self._time_heapq, (self._now + delay, child_task_info))
 
     def _process_task(self):
         # Cycle while there are tasks ready for execution.
