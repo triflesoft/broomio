@@ -22,6 +22,7 @@ from socket import SO_ERROR
 from socket import SOCK_DGRAM
 from socket import SOCK_STREAM
 from socket import SOL_SOCKET
+from socket import SHUT_WR
 from struct import calcsize
 from struct import unpack
 from types import coroutine
@@ -147,8 +148,8 @@ class socket(object):
         return (yield SYSCALL_SOCKET_SENDTO, self._socket, data, addr)
 
     @coroutine
-    def shutdown(self, how):
-        return (yield SYSCALL_SOCKET_SHUTDOWN, self._socket, how)
+    def shutdown(self):
+        return (yield SYSCALL_SOCKET_SHUTDOWN, self._socket, SHUT_WR)
 
 
 try:

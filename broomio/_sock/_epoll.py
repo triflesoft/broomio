@@ -41,64 +41,105 @@ class LoopSockEpoll(_LoopSlots):
 
     def _sock_send(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
-        # Send data.
+
         sock, data = task_info.yield_args
-        size = sock.send(data)
-        # Enqueue task.
-        task_info.send_args = size
+
+        try:
+            size = sock.send(data)
+            task_info.send_args = size
+        except OSError as e:
+            task_info.throw_exc = e
+
         self._task_enqueue_old(task_info)
 
     def _sock_sendto(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
-        # Send data.
+
         sock, data, addr = task_info.yield_args
-        size = sock.sendto(data, addr)
-        # Enqueue task.
-        task_info.send_args = size
+
+        try:
+            size = sock.sendto(data, addr)
+            task_info.send_args = size
+        except OSError as e:
+            task_info.throw_exc = e
+
         self._task_enqueue_old(task_info)
 
     def _sock_recv(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
-        # Receive data.
+
         sock, size = task_info.yield_args
-        data = sock.recv(size)
-        # Enqueue task.
-        task_info.send_args = data
+
+        try:
+            data = sock.recv(size)
+            task_info.send_args = data
+        except OSError as e:
+            task_info.throw_exc = e
+
         self._task_enqueue_old(task_info)
 
     def _sock_recv_into(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
-        # Receive data.
+
         sock, data, size = task_info.yield_args
-        size = sock.recv_into(data, size)
-        # Enqueue task.
-        task_info.send_args = size
+
+        try:
+            size = sock.recv_into(data, size)
+            task_info.send_args = size
+        except OSError as e:
+            task_info.throw_exc = e
+
         self._task_enqueue_old(task_info)
 
     def _sock_recvfrom(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
-        # Receive data.
+
         sock, size = task_info.yield_args
-        data, addr = sock.recvfrom(size)
-        # Enqueue task.
-        task_info.send_args = data, addr
+
+        try:
+            data, addr = sock.recvfrom(size)
+            task_info.send_args = data, addr
+        except OSError as e:
+            task_info.throw_exc = e
+
         self._task_enqueue_old(task_info)
 
     def _sock_recvfrom_into(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
-        # Receive data.
+
         sock, data, size = task_info.yield_args
-        size, addr = sock.recvfrom_into(data, size)
-        # Enqueue task.
-        task_info.send_args = size, addr
+
+        try:
+            size, addr = sock.recvfrom_into(data, size)
+            task_info.send_args = size, addr
+        except OSError as e:
+            task_info.throw_exc = e
+
         self._task_enqueue_old(task_info)
 
-    def _sock_close(self, sock, socket_info):
+    def _sock_shutdown(self, task_info, socket_info):
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+
+        sock, how = task_info.yield_args
+
+        try:
+            sock.shutdown(how)
+        except OSError as e:
+            task_info.throw_exc = e
+
+        self._task_enqueue_old(task_info)
+
+    def _sock_close(self, task_info, socket_info):
         assert socket_info.event_mask == 0, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+
+        sock = task_info.yield_args[0]
+
         sock.close()
         socket_info.kind = SOCKET_KIND_UNKNOWN
         socket_info.recv_ready = False
         socket_info.send_ready = False
+
+        self._task_enqueue_old(task_info)
 
     def _epoll_register(self, socket_info, event_mask):
         # Find all bits in new event mask, which are not present in old event mask
@@ -244,12 +285,7 @@ class LoopSockEpoll(_LoopSlots):
                                 socket_info.recv_task_info = None
                                 self._socket_task_count -= 1
 
-                            sock = task_info.yield_args[0]
-
-                            self._sock_close(sock, socket_info)
-                            self._task_enqueue_old(task_info)
-
-                            del sock
+                            self._sock_close(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_CONNECT:
                             # Connect.
                             sock, addr = task_info.yield_args
@@ -265,10 +301,10 @@ class LoopSockEpoll(_LoopSlots):
                         elif task_info.yield_func == SYSCALL_SOCKET_SENDTO:
                             self._sock_sendto(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SHUTDOWN:
-                            # TODO: SYSCALL_SOCKET_SHUTDOWN is not implemented yet.
-                            pass
+                            self._sock_shutdown(task_info, socket_info)
                         else:
                             raise Exception(f'Unexpected syscall {task_info.yield_func}.')
+
             del socket_info
 
         return True

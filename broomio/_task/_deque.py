@@ -154,7 +154,6 @@ class LoopTaskDeque(_LoopSlots):
 
                 self._task_enqueue_old(watcher_task_info)
 
-
     def _task_enqueue_new(self, coro, parent_task_info, stack_frames, parent_nursery):
         child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, parent_nursery)
         parent_nursery._children.add(child_task_info)
@@ -193,15 +192,21 @@ class LoopTaskDeque(_LoopSlots):
                         for stack_frame in frame_task_info.stack_frames:
                             prev_traceback = TracebackType(prev_traceback, stack_frame, stack_frame.f_lasti, stack_frame.f_lineno)
 
-                    # Throw exception
-                    task_info.yield_func, *task_info.yield_args = task_info.coro.throw(type(task_info.throw_exc), task_info.throw_exc, prev_traceback)
-                    # Clean up throw_exc. If any exception will be thrown, throw_exc will be assigned accordingly.
-                    task_info.throw_exc = None
+                    try:
+                        # Throw exception
+                        # TODO: Current implementation of nice tracebacks resets coro.cr.await, so they are temporarily disabled.
+                        # task_info.yield_func, *task_info.yield_args = task_info.coro.throw(type(task_info.throw_exc), task_info.throw_exc, prev_traceback)
+                        task_info.yield_func, *task_info.yield_args = task_info.coro.throw(type(task_info.throw_exc), task_info.throw_exc)
+                    finally:
+                        # Clean up throw_exc. If any exception will be thrown, throw_exc will be assigned accordingly.
+                        task_info.throw_exc = None
                 else:
-                    # Execute task.
-                    task_info.yield_func, *task_info.yield_args = task_info.coro.send(task_info.send_args)
-                    # Clean up send_args. If any syscall was requested, send_args will be assigned accordingly.
-                    task_info.send_args = None
+                    try:
+                        # Execute task.
+                        task_info.yield_func, *task_info.yield_args = task_info.coro.send(task_info.send_args)
+                    finally:
+                        # Clean up send_args. If any syscall was requested, send_args will be assigned accordingly.
+                        task_info.send_args = None
 
                 coro_succeeded = True
             except StopIteration:
@@ -391,15 +396,13 @@ class LoopTaskDeque(_LoopSlots):
                                 socket_info.recv_task_info = None
                                 self._socket_task_count -= 1
 
-                            self._sock_close(sock, socket_info)
-                            self._task_enqueue_old(task_info)
+                            self._sock_close(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SEND:
                             self._sock_send(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SENDTO:
                             self._sock_sendto(task_info, socket_info)
                         elif task_info.yield_func == SYSCALL_SOCKET_SHUTDOWN:
-                            # TODO: SYSCALL_SOCKET_SHUTDOWN is not implemented yet.
-                            pass
+                            self._sock_shutdown(task_info, socket_info)
                         else:
                             assert False, f'Unexpected syscall {task_info.yield_func}.'
                     else:
@@ -415,8 +418,7 @@ class LoopTaskDeque(_LoopSlots):
                                 socket_info.recv_task_info = None
                                 self._socket_task_count -= 1
 
-                            self._sock_close(sock, socket_info)
-                            self._task_enqueue_old(task_info)
+                            self._sock_close(task_info, socket_info)
                         else:
                             # Socket is not yet ready for writing.
                             # Bind task and socket.
