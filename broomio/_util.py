@@ -38,8 +38,9 @@ class _LoopSlots(object):
         # SPEED:     self._task_deque.append(task_info)  # THIS IS SLOW
         # SPEED:
 
-        # TODO: justify determinism
-        #self._task_enqueue_old = self._task_deque.append if int(time()) % 2 == 0 else self._task_deque.appendleft
+        # TODO: Justify determinism.
+        # Making children run in the same tick requires children to be run after parent.
+        # Inserting child at the random position after parent is too slow to implement without strong justification.
         self._task_enqueue_old = self._task_deque.append
 
         # Root nursery.
@@ -91,9 +92,16 @@ class _LoopSlots(object):
         # Number of tasks awaiting for sockets to become readable or writable.
         self._socket_task_count = 0
 
-        # Event polling is Linux specific for _now.
+        # Event polling is effective on Linux only for now.
         # TODO: Support IOCP.
-        # TODO: Support kqueue.
+        # TODO: Support kqueue
+        # The major difference betweel select/poll/epoll (S/P/E) and kqueue/IOCP (K/I) is that
+        # S/P/E tells when operation can be performed and K/I tells when previous operation
+        # completed. Thus to support K/I either entire _epoll.py should be rewritten as
+        # _iocp.py/_kqueue.py introducing addtional complexity and inevitable bugs or S/P/E
+        # logic should be emulated with K/I. Emulating looks possible if we assume that less
+        # than N pending operations logically equals readyness to perform one more operation.
+        # Who knows if that's true statement at all?
 
         if technology:
             technologies = [technology, 'epoll', 'iocp', 'kqueue', 'poll', 'select']

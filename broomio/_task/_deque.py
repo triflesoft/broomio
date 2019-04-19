@@ -143,7 +143,8 @@ class LoopTaskDeque(_LoopSlots):
 
                 possible_owner_task_info = watcher_task_info
 
-                # TODO: Validate algorithm
+                # TODO: Validate algorithm.
+                # Looks like passing Nursery between siblings is not supported at all.
                 while possible_owner_task_info:
                     if possible_owner_task_info.child_nursery == nursery:
                         possible_owner_task_info.child_nursery = None

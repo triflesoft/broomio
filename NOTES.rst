@@ -7,7 +7,7 @@ Fortunately values of EPOLL* and POLL* are equal in Linux.
     The associated file is available for read(2) operations.
 
 - EPOOLPRI / POLLPRI == 0x_0002
-    TODO: Process POOLPRI event.
+    This event is ignored.
     There is some exceptional condition on the file descriptor. Possibilities include:
 
     - There is out-of-band data on a TCP socket (see tcp(7)).
@@ -21,12 +21,12 @@ Fortunately values of EPOLL* and POLL* are equal in Linux.
     Error condition happened on the associated file descriptor. This event is also reported for the write end of a pipe when the read end has been closed.  epoll_wait(2) will always report for this event; it is not necessary to set it in events.
 
 - EPOLLHUP / POLLHUP == 0x_0010
-    TODO: Process POLLHUP event.
+    According to primitive tests with level-triggered epoll, this event comes with EPOLLERR, so no need for processing. Real life cases required to reconsider.
     Hang up happened on the associated file descriptor. epoll_wait(2) will always wait for this event; it is not necessary to set it in events. Note that when reading from a channel such as a pipe or a stream socket, this event merely indicates that the peer closed its end of the channel. Subsequent reads from the channel will return 0 (end of file) only after all outstanding data in the channel has been consumed.
 
 - EPOLLRDHUP / POLLRDHUP == 0x_2000
-    TODO: Process POLLRDHUP event.
-    Stream socket peer closed connection, or shut down writing half of connection.  (This flag is especially useful for writing simple code to detect peer shutdown when using Edge Triggered monitoring.)
+    According to primitive tests with level-triggered epoll, this event never comes, so no need for processing. Real life cases required to reconsider.
+    Stream socket peer closed connection, or shut down writing half of connection. (This flag is especially useful for writing simple code to detect peer shutdown when using Edge Triggered monitoring.)
 
 - EPOLLRDNORM / POLLRDNORM == 0x_0040
 
