@@ -30,6 +30,11 @@ class CoroutineTracebackException(BaseException):
 
 
 class Nursery(object):
+    __slots__ = \
+        '_children', '_watchers', \
+        '_exception_policy', '_exceptions', \
+        '_timeout', '_task_info'
+
     def __init__(self, exception_policy=NurseryExceptionPolicy.Abort, timeout=-1):
         self._children = set()
         self._watchers = set()
@@ -54,16 +59,10 @@ class Nursery(object):
 
     @coroutine
     def start_soon(self, coro):
-        if self._exceptions:
-            raise NurseryError(self._exceptions) from self._exceptions[0][1]
-
         return (yield SYSCALL_NURSERY_START_SOON, self, coro)
 
     @coroutine
     def start_later(self, coro, delay):
-        if self._exceptions:
-            raise NurseryError(self._exceptions) from self._exceptions[0][1]
-
         return (yield SYSCALL_NURSERY_START_LATER, self, coro, delay)
 
 
@@ -91,10 +90,10 @@ class _TaskInfo(object):
         self.parent_task_info = parent_task_info
         # Stack frames.
         self.stack_frames = stack_frames
-        # Socket descriptor for which task is waiting to become readable.
+        # Socket descriptor for which task is waiting to become readable. \
         # Only one of recv_fileno and send_fileno may be set.
         self.recv_fileno = None
-        # Socket descriptor for which task is waiting to become writable.
+        # Socket descriptor for which task is waiting to become writable. \
         # Only one of recv_fileno and send_fileno may be set.
         self.send_fileno = None
         # Nursery to which this task belongs.

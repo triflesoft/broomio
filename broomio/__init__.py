@@ -15,13 +15,11 @@ __all__ = ['Loop', 'Nursery', 'NurseryError', 'NurseryExceptionPolicy', 'sleep',
 
 class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
     def start_soon(self, coro):
-        # Create task info for root task. Root tasks have no parent.
-        # Root tasks can be created after loop was started from \
-        # another thread, but that does not look like great idea.
+        # Create task info for root task. Root tasks have no parent. Root tasks can be created after loop was started \
+        # from another thread, but that does not look like great idea.
         stack_frames = []
 
-        # Extract method call chain frames.
-        # Skip one stack frame corresponding to Loop.start_soon method.
+        # Extract method call chain frames. Skip one stack frame corresponding to Loop.start_soon method.
         for frame_index in range(1, 256):
             try:
                 stack_frames.append(_getframe(frame_index))
@@ -35,11 +33,10 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
         running = True
 
         while running:
-            # Each loop iteration is a tick.
-            # Current time as reference for timers.
+            # Each loop iteration is a tick. Current time as reference for timers.
             self._now = time()
 
-            # SPEED: Testing if collection is empty before calling method is much faster.
+            # SPEED: Testing if collection is empty before calling method is much faster. \
             # SPEED: If collection is empty, method is not called.
 
             # Are there tasks ready for execution?

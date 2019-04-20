@@ -28,18 +28,15 @@ class _LoopSlots(object):
         '_sock_array', '_get_sock_info', '_socket_wait_count', '_socket_task_count', '_socket_epoll'
 
     def __init__(self, technology=None):
-        # Deque with tasks ready to be executed.
-        # These are new tasks or tasks for which requested syscall completed.
+        # Deque with tasks ready to be executed. These are new tasks or tasks for which requested syscall completed.
         self._task_deque = deque()
 
-        # SPEED: Much faster than declaring method, which calls method.
-        # SPEED:
-        # SPEED: def _task_enqueue_old(self, task_info): # THIS IS SLOW
-        # SPEED:     self._task_deque.append(task_info)  # THIS IS SLOW
-        # SPEED:
+        # SPEED: Much faster than declaring method, which calls method. \
+        # SPEED: def _task_enqueue_old(self, task_info): # THIS IS SLOW \
+        # SPEED:     self._task_deque.append(task_info)  # THIS IS SLOW \
 
-        # FIXME: Justify determinism.
-        # Making children run in the same tick requires children to be run after parent.
+        # FIXME: Justify determinism. \
+        # Making children run in the same tick requires children to be run after parent. \
         # Inserting child at the random position after parent is too slow to implement without strong justification.
         self._task_enqueue_old = self._task_deque.append
 
@@ -52,10 +49,10 @@ class _LoopSlots(object):
 
         try:
             # For Linux: \
-            # Array of sockets. Indexes in list are file descriptors. O(1) access time.
-            # Why can we do this? Man page socket(2) states:
+            # Array of sockets. Indexes in list are file descriptors. O(1) access time. \
+            # Why can we do this? Man page socket(2) states: \
             #     The file descriptor returned by a successful call will be \
-            #     the lowest-numbered file descriptor not currently open for the process.
+            #     the lowest-numbered file descriptor not currently open for the process. \
             # While some indexes will not be used, for instance 0, 1, and 2, because \
             # they will correspond to file descriptors opened by different means, we \
             # still may assume values of file descriptors to be small integers.
@@ -65,8 +62,8 @@ class _LoopSlots(object):
             _, nofile_hard = getrlimit(RLIMIT_NOFILE)
             self._sock_array = [_SocketInfo(fileno) for fileno in range(nofile_hard)]
         except:
-            # For Windows \
-            # Dict of sockets. Keys in dict are file descriptors. O(log(N)) access time.
+            # For Windows: \
+            # Dict of sockets. Keys in dict are file descriptors. O(log(N)) access time. \
             # No assumptions about socket file descriptor values' range \
             # can possibly be deducted from MSDN.
             class _SocketDict(dict):
@@ -78,29 +75,27 @@ class _LoopSlots(object):
 
             self._sock_array = _SocketDict()
 
-        # SPEED: Much faster than declaring method, which calls method.
-        # SPEED:
-        # SPEED: def _get_sock_info(self, fileno):   # THIS IS SLOW
+        # SPEED: Much faster than declaring method, which calls method. \
+        # SPEED: def _get_sock_info(self, fileno):   # THIS IS SLOW \
         # SPEED:     return self._sock_array[fileno] # THIS IS SLOW
-        # SPEED:
         self._get_sock_info = self._sock_array.__getitem__
 
-        # Number of sockets waiting to become readable or writable.
+        # Number of sockets waiting to become readable or writable. \
         # If socket is awaited to become readable and writable, it will be counted twice.
         self._socket_wait_count = 0
 
         # Number of tasks awaiting for sockets to become readable or writable.
         self._socket_task_count = 0
 
-        # Event polling is effective on Linux only for now.
-        # TODO: Support IOCP.
-        # TODO: Support kqueue
-        # The major difference betweel select/poll/epoll (S/P/E) and kqueue/IOCP (K/I) is that
-        # S/P/E tells when operation can be performed and K/I tells when previous operation
-        # completed. Thus to support K/I either entire _epoll.py should be rewritten as
-        # _iocp.py/_kqueue.py introducing addtional complexity and inevitable bugs or S/P/E
-        # logic should be emulated with K/I. Emulating looks possible if we assume that less
-        # than N pending operations logically equals readyness to perform one more operation.
+        # Event polling is effective on Linux only for now. \
+        # TODO: Support IOCP. \
+        # TODO: Support kqueue. \
+        # The major difference betweel select/poll/epoll (S/P/E) and kqueue/IOCP (K/I) is that \
+        # S/P/E tells when operation can be performed and K/I tells when previous operation \
+        # completed. Thus to support K/I either entire _epoll.py should be rewritten as \
+        # _iocp.py/_kqueue.py introducing addtional complexity and inevitable bugs or S/P/E \
+        # logic should be emulated with K/I. Emulating looks possible if we assume that less \
+        # than N pending operations logically equals readyness to perform one more operation. \
         # Who knows if that's true statement at all?
 
         if technology:

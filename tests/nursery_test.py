@@ -80,16 +80,15 @@ class TestNursery(TestCase):
         self.assertEqual(vars['count_exit'], 1)
 
     def test_nested_exception_handling(self):
-        # Execution timeline
-        #      0.0 0.1 0.2 0.3 0.4 0.5 0.6
-        # 1a    |***|***|***|***!***|   |
-        # 1a/2a |   |***|***|***!***|   |
-        # 1a/2b |   |***|   |   !   |   |
-        # 1b    |   |***|***|***!***|***|
-        # 1b/2c |   |   |***|***!***|***|
-        # 1b/2c |   |   |***|   !   |   |
-        # Execution will be interrupted at 0.4s,
-        # thus there should be 6 enters and 2 exits.
+        # Execution timeline \
+        #      0.0 0.1 0.2 0.3 0.4 0.5 0.6 \
+        # 1a    |***|***|***|***!***|   | \
+        # 1a/2a |   |***|***|***!***|   | \
+        # 1a/2b |   |***|   |   !   |   | \
+        # 1b    |   |***|***|***!***|***| \
+        # 1b/2c |   |   |***|***!***|***| \
+        # 1b/2c |   |   |***|   !   |   | \
+        # Execution will be interrupted at 0.4s, thus there should be 6 enters and 2 exits.
         async def child2(vars, delay):
             vars['count_enter'] += 1
             await sleep(delay)

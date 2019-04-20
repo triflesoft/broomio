@@ -167,7 +167,7 @@ except ImportError:
     socket._opt_reuse_port = None
 
 try:
-    # FIXME: Some OSes support SO_PEERCRED while Python's socket module does not export this constant
+    # FIXME: Some OSes support SO_PEERCRED while Python's socket module does not export this constant. \
     # FIXME: They say SO_PEERCRED equals 17 on most x86/x64 Linuxes
     from socket import SO_PEERCRED
 
@@ -195,17 +195,15 @@ class _SocketInfo(object):
         self.fileno = fileno
         # Socket kind.
         self.kind = SOCKET_KIND_UNKNOWN
-        # Task which waits for socket to become readable.
+        # Task which waits for socket to become readable. \
         # Does not necessary mean task wants to call recv* family function.
         self.recv_task_info = None
-        # Task which waits for socket to become writable.
+        # Task which waits for socket to become writable. \
         # Does not necessary mean task wants to call send* family function.
         self.send_task_info = None
-        # True if socket became readable when no task was waiting for it \
-        # to become readable; otherwise False.
+        # True if socket became readable when no task was waiting for it to become readable; otherwise False.
         self.recv_ready = False
-        # True if socket became writable when no task was waiting for it \
-        # to become writable; otherwise False.
+        # True if socket became writable when no task was waiting for it to become writable; otherwise False.
         self.send_ready = False
         # Event mask of currently awaited events.
         self.event_mask = 0

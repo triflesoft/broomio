@@ -48,10 +48,9 @@ class TaskAbortError(BaseException):
 
 class LoopTaskDeque(_LoopSlots):
     def _nursery_abort_children(self, nursery):
-        # Child task is already queued either in _task_deque, _time_heapq or _sock_array.
-        # If child task is already is _task_deque there is no need to add it to _task_deque again.
-        # However if child task is in _time_heapq or _sock_array, it must be removed from there \
-        # and added to _task_deque for throwing an exception.
+        # Child task is already queued either in _task_deque, _time_heapq or _sock_array. If child task is already is \
+        # _task_deque there is no need to add it to _task_deque again. However if child task is in _time_heapq or \
+        # _sock_array, it must be removed from there and added to _task_deque for throwing an exception.
         has_time_changes = False
 
         for child_task_info in nursery._children:
@@ -89,7 +88,7 @@ class LoopTaskDeque(_LoopSlots):
 
                 possible_owner_task_info = watcher_task_info
 
-                # FIXME: Validate algorithm.
+                # FIXME: Validate algorithm. \
                 # Looks like passing Nursery between siblings is not supported at all.
                 while possible_owner_task_info:
                     if possible_owner_task_info.child_nursery == nursery:
@@ -108,7 +107,8 @@ class LoopTaskDeque(_LoopSlots):
             # This task is waiting for socket to become readable.
             socket_info = self._get_sock_info(task_info.recv_fileno)
 
-            assert task_info == socket_info.recv_task_info, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+            assert task_info == socket_info.recv_task_info, \
+                f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
             # Unbind task and socket.
             task_info.recv_fileno = None
@@ -125,7 +125,8 @@ class LoopTaskDeque(_LoopSlots):
             # This task is waiting for socket to become writable.
             socket_info = self._get_sock_info(task_info.send_fileno)
 
-            assert task_info == socket_info.send_task_info, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+            assert task_info == socket_info.send_task_info, \
+                f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
             # Unbind task and socket.
             task_info.send_fileno = None
@@ -137,10 +138,9 @@ class LoopTaskDeque(_LoopSlots):
             self._task_enqueue_old(task_info)
 
             return 'sock/send'
-        
+
         try:
-            # If child was scheduled to run later, cancel that \
-            # and reschedule task to be run in current tick.
+            # If child was scheduled to run later, cancel that and reschedule task to be run in current tick.
             index = 0
 
             while index < len(self._time_heapq):
@@ -157,6 +157,10 @@ class LoopTaskDeque(_LoopSlots):
 
     def _task_enqueue_new(self, coro, parent_task_info, stack_frames, parent_nursery):
         child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, parent_nursery)
+
+        if parent_nursery._exceptions:
+            child_task_info.throw_exc = TaskAbortError()
+
         parent_nursery._children.add(child_task_info)
         self._task_enqueue_old(child_task_info)
 
@@ -166,8 +170,7 @@ class LoopTaskDeque(_LoopSlots):
         heappush(self._time_heapq, (self._now + delay, 0x_01, child_task_info))
 
     def _process_task(self):
-        # Cycle while there are tasks ready for execution.
-        # New tasks may be enqueued while this loop cycles.
+        # Cycle while there are tasks ready for execution. New tasks may be enqueued while this loop cycles.
         while len(self._task_deque) > 0:
             # Get next task.
             task_info = self._task_deque.pop()
@@ -193,15 +196,19 @@ class LoopTaskDeque(_LoopSlots):
                         for stack_frame in frame_task_info.stack_frames:
                             prev_traceback = TracebackType(prev_traceback, stack_frame, stack_frame.f_lasti, stack_frame.f_lineno)
 
-                    # Fake traceback is provided as __cause__, because otherwise, if provided as third argument of
+                    # Fake traceback is provided as __cause__, because otherwise, if provided as third argument of \
                     # coro.throw, then fake parent coroutine state is corrupted.
                     task_info.throw_exc.__cause__ = CoroutineTracebackException().with_traceback(prev_traceback)
 
                     try:
-                        # Throw exception
-                        # Fake traceback is provided as __cause__, because otherwise, if provided as third argument of
-                        # coro.throw, then fake parent coroutine state is corrupted.
-                        # task_info.yield_func, *task_info.yield_args = task_info.coro.throw(type(task_info.throw_exc), task_info.throw_exc, prev_traceback) # THIS CAUSES PROB
+                        # Throw exception. \
+                        # Fake traceback is provided as __cause__. \
+                        # See https://www.python.org/dev/peps/pep-3134/ for details. \
+                        # When traceback is provided as third argument, then fake parent coroutine state is corrupted. \
+                        # task_info.yield_func, *task_info.yield_args = task_info.coro.throw( \
+                        #   type(task_info.throw_exc), \
+                        #   task_info.throw_exc, \
+                        #   prev_traceback) # THIS CAUSES PROBLEMS
                         task_info.yield_func, *task_info.yield_args = task_info.coro.throw(type(task_info.throw_exc), task_info.throw_exc)
                     finally:
                         # Clean up throw_exc. If any exception will be thrown, throw_exc will be assigned accordingly.
@@ -216,10 +223,8 @@ class LoopTaskDeque(_LoopSlots):
 
                 coro_succeeded = True
             except StopIteration:
-                # This code is copy-paste of "GeneratorExit" handling, \
-                # but it will not be so in future.
-                # Task completed successfully.
-                # Remove task from parent_nursery.
+                # This code is copy-paste of "GeneratorExit" handling, but it will not be so in future. \
+                # Task completed successfully. Remove task from parent_nursery.
                 parent_nursery = task_info.parent_nursery
                 parent_nursery._children.remove(task_info)
                 # Notify watchers
@@ -227,10 +232,8 @@ class LoopTaskDeque(_LoopSlots):
 
                 del parent_nursery
             except TaskAbortError:
-                # This code is copy-paste of "StopIteration" handling, \
-                # but it will not be so in future.
-                # Task completed because we requested it to complete.
-                # Remove task from parent_nursery.
+                # This code is copy-paste of "StopIteration" handling, but it will not be so in future. \
+                # Task completed because we requested it to complete. Remove task from parent_nursery.
                 parent_nursery = task_info.parent_nursery
                 parent_nursery._children.remove(task_info)
                 # Notify watchers
@@ -238,8 +241,7 @@ class LoopTaskDeque(_LoopSlots):
 
                 del parent_nursery
             except Exception as child_exception:
-                # Task failed, exception thrown.
-                # Remove child task from parent_nursery.
+                # Task failed, exception thrown. Remove child task from parent_nursery.
                 parent_nursery = task_info.parent_nursery
                 parent_nursery._children.remove(task_info)
 
@@ -344,15 +346,19 @@ class LoopTaskDeque(_LoopSlots):
                     fileno = sock.fileno()
                     socket_info = self._get_sock_info(fileno)
 
-                    assert socket_info.recv_task_info is None, f'Another task {socket_info.recv_task_info.coro} is already receiving on this socket.'
-                    assert task_info.recv_fileno is None, 'Task is already waiting for another socket to become readable.'
-                    assert task_info.send_fileno is None, 'Task is already waiting for another socket to become writable.'
+                    assert socket_info.recv_task_info is None, \
+                        f'Another task {socket_info.recv_task_info.coro} is already receiving on this socket.'
+                    assert task_info.recv_fileno is None, \
+                        'Task is already waiting for another socket to become readable.'
+                    assert task_info.send_fileno is None, \
+                        'Task is already waiting for another socket to become writable.'
 
                     if socket_info.recv_ready:
                         # Socket is already ready for reading.
                         socket_info.recv_ready = False
 
-                        assert socket_info.recv_task_info is None, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+                        assert socket_info.recv_task_info is None, \
+                            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
                         if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
                             self._sock_accept(task_info, socket_info)
@@ -367,8 +373,7 @@ class LoopTaskDeque(_LoopSlots):
                         else:
                             assert False, f'Unexpected syscall {task_info.yield_func}.'
                     else:
-                        # Socket is not yet ready for reading.
-                        # Bind task and socket.
+                        # Socket is not yet ready for reading. # Bind task and socket.
                         socket_info.recv_task_info = task_info
                         self._socket_task_count += 1
                         task_info.recv_fileno = fileno
@@ -383,15 +388,19 @@ class LoopTaskDeque(_LoopSlots):
                     fileno = sock.fileno()
                     socket_info = self._get_sock_info(fileno)
 
-                    assert socket_info.send_task_info is None, f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
-                    assert task_info.recv_fileno is None, 'Task is already waiting for another socket to become readable.'
-                    assert task_info.send_fileno is None, 'Task is already waiting for another socket to become writable.'
+                    assert socket_info.send_task_info is None, \
+                        f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
+                    assert task_info.recv_fileno is None, \
+                        'Task is already waiting for another socket to become readable.'
+                    assert task_info.send_fileno is None, \
+                        'Task is already waiting for another socket to become writable.'
 
                     if socket_info.send_ready:
                         # Socket is already ready for writing.
                         socket_info.send_ready = False
 
-                        assert socket_info.send_task_info is None, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+                        assert socket_info.send_task_info is None, \
+                            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
                         if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
                             # Close socket.
@@ -426,8 +435,7 @@ class LoopTaskDeque(_LoopSlots):
 
                             self._sock_close(task_info, socket_info)
                         else:
-                            # Socket is not yet ready for writing.
-                            # Bind task and socket.
+                            # Socket is not yet ready for writing. # Bind task and socket.
                             socket_info.send_task_info = task_info
                             self._socket_task_count += 1
                             task_info.send_fileno = fileno
@@ -442,9 +450,12 @@ class LoopTaskDeque(_LoopSlots):
                     fileno = sock.fileno()
                     socket_info = self._get_sock_info(fileno)
 
-                    assert socket_info.send_task_info is None, f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
-                    assert task_info.recv_fileno is None, 'Task is already waiting for another socket to become readable.'
-                    assert task_info.send_fileno is None, 'Task is already waiting for another socket to become writable.'
+                    assert socket_info.send_task_info is None, \
+                        f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
+                    assert task_info.recv_fileno is None, \
+                        'Task is already waiting for another socket to become readable.'
+                    assert task_info.send_fileno is None, \
+                        'Task is already waiting for another socket to become writable.'
 
                     # Bind task and socket.
                     socket_info.send_task_info = task_info
@@ -467,10 +478,14 @@ class LoopTaskDeque(_LoopSlots):
                     fileno = sock.fileno()
                     socket_info = self._get_sock_info(fileno)
 
-                    assert socket_info.send_task_info is None, f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
-                    assert socket_info.recv_task_info is None, f'Another task {socket_info.recv_task_info.coro} is already receiving on this socket.'
-                    assert task_info.recv_fileno is None, 'Task is already waiting for another socket to become readable.'
-                    assert task_info.send_fileno is None, 'Task is already waiting for another socket to become writable.'
+                    assert socket_info.send_task_info is None, \
+                        f'Another task {socket_info.send_task_info.coro} is already sending on this socket.'
+                    assert socket_info.recv_task_info is None, \
+                        f'Another task {socket_info.recv_task_info.coro} is already receiving on this socket.'
+                    assert task_info.recv_fileno is None, \
+                        'Task is already waiting for another socket to become readable.'
+                    assert task_info.send_fileno is None, \
+                        'Task is already waiting for another socket to become writable.'
 
                     sock.listen(backlog)
                     socket_info.kind = SOCKET_KIND_SERVER_LISTENING

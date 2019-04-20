@@ -20,7 +20,8 @@ from .._util import _LoopSlots
 
 class LoopSockEpoll(_LoopSlots):
     def _sock_accept(self, task_info, socket_info):
-        assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+        assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, \
+            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
         # Accept as many connections as possible.
         sock, nursery, handler_factory = task_info.yield_args
         # Extract parent coroutine call chain frames.
@@ -30,7 +31,8 @@ class LoopSockEpoll(_LoopSlots):
             while True:
                 client_socket, client_address = sock.accept()
                 client_socket_info = self._get_sock_info(client_socket.fileno())
-                assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+                assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, \
+                    f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
                 client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
                 handler = handler_factory(socket(sock=client_socket), client_address)
                 self._task_enqueue_new(handler, task_info, stack_frames, nursery)
@@ -40,7 +42,8 @@ class LoopSockEpoll(_LoopSlots):
         self._task_enqueue_old(task_info)
 
     def _sock_send(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
+            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
         sock, data = task_info.yield_args
 
@@ -53,7 +56,8 @@ class LoopSockEpoll(_LoopSlots):
         self._task_enqueue_old(task_info)
 
     def _sock_sendto(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
+            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
         sock, data, addr = task_info.yield_args
 
@@ -66,7 +70,8 @@ class LoopSockEpoll(_LoopSlots):
         self._task_enqueue_old(task_info)
 
     def _sock_recv(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
+            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
         sock, size = task_info.yield_args
 
@@ -79,7 +84,8 @@ class LoopSockEpoll(_LoopSlots):
         self._task_enqueue_old(task_info)
 
     def _sock_recv_into(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
+            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
         sock, data, size = task_info.yield_args
 
@@ -92,7 +98,8 @@ class LoopSockEpoll(_LoopSlots):
         self._task_enqueue_old(task_info)
 
     def _sock_recvfrom(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
+            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
         sock, size = task_info.yield_args
 
@@ -105,7 +112,8 @@ class LoopSockEpoll(_LoopSlots):
         self._task_enqueue_old(task_info)
 
     def _sock_recvfrom_into(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
+            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
         sock, data, size = task_info.yield_args
 
@@ -118,7 +126,8 @@ class LoopSockEpoll(_LoopSlots):
         self._task_enqueue_old(task_info)
 
     def _sock_shutdown(self, task_info, socket_info):
-        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+        assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
+            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
         sock, how = task_info.yield_args
 
@@ -130,7 +139,8 @@ class LoopSockEpoll(_LoopSlots):
         self._task_enqueue_old(task_info)
 
     def _sock_close(self, task_info, socket_info):
-        assert socket_info.event_mask == 0, f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+        assert socket_info.event_mask == 0, \
+            f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
         sock = task_info.yield_args[0]
 
@@ -142,7 +152,7 @@ class LoopSockEpoll(_LoopSlots):
         self._task_enqueue_old(task_info)
 
     def _epoll_register(self, socket_info, event_mask):
-        # Find all bits in new event mask, which are not present in old event mask
+        # Find all bits in new event mask, which are not present in old event mask. \
         # In other words find all 0,1 combinations.
         event_mask_diff = ~socket_info.event_mask & event_mask
 
@@ -161,7 +171,7 @@ class LoopSockEpoll(_LoopSlots):
                 self._socket_epoll.modify(socket_info.fileno, 0x_2018 | socket_info.event_mask)
 
     def _epoll_unregister(self, socket_info, event_mask):
-        # Find all bits in new event mask, which are also present in old event mask
+        # Find all bits in new event mask, which are also present in old event mask. \
         # In other words find all 1,1 combinations.
         event_mask_diff = socket_info.event_mask & event_mask
 
@@ -181,17 +191,13 @@ class LoopSockEpoll(_LoopSlots):
 
     def _process_sock(self):
         if self._socket_task_count == 0:
-            # There are unclosed sockets.
-            # Use the following code to debug
-            #
-            # import tracemalloc
-            #
+            # There are unclosed sockets. Use the following code to debug \
+            # import tracemalloc \
             # tracemalloc.start(10)
 
             raise RuntimeWarning('Unclosed sockets with no tasks awaiting them detected. Enable tracemalloc to get the socket allocation traceback.')
 
-        # If any tasks are scheduled to be run later, do not make them late.
-        # Otherwise wait for 5 second.
+        # If any tasks are scheduled to be run later, do not make them late; otherwise wait for 5 second. \
         # FIXME: Justify timeout value, currently 5 seconds.
         timeout = self._time_heapq[0][0] - self._now if len(self._time_heapq) > 0 else 5
         events = self._socket_epoll.poll(timeout)
@@ -236,8 +242,7 @@ class LoopSockEpoll(_LoopSlots):
                     task_info = socket_info.recv_task_info
 
                     if task_info is None:
-                        # No task awaits for socket to become readable.
-                        # Mark as readale.
+                        # No task awaits for socket to become readable. Mark as readale.
                         socket_info.recv_ready = True
 
                         self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN
@@ -265,8 +270,7 @@ class LoopSockEpoll(_LoopSlots):
                     task_info = socket_info.send_task_info
 
                     if task_info is None:
-                        # No task awaits for socket to become writable.
-                        # Mark as writable.
+                        # No task awaits for socket to become writable. Mark as writable.
                         socket_info.send_ready = True
 
                         self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
