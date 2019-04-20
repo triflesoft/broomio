@@ -85,7 +85,7 @@ class LoopTaskDeque(_LoopSlots):
             for watcher_task_info in nursery._watchers:
                 if nursery._exceptions:
                     watcher_task_info.throw_exc = NurseryError(nursery._exceptions)
-                    watcher_task_info.throw_exc.__cause__ = nursery._exception[0][1]
+                    watcher_task_info.throw_exc.__cause__ = nursery._exceptions[0][1]
 
                 possible_owner_task_info = watcher_task_info
 
