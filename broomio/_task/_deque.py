@@ -84,12 +84,12 @@ class LoopTaskDeque(_LoopSlots):
             # Notify all watchers.
             for watcher_task_info in nursery._watchers:
                 if nursery._exceptions:
-                    # TODO: Implement raise NurseryError from nursery._exception[0][1].
                     watcher_task_info.throw_exc = NurseryError(nursery._exceptions)
+                    watcher_task_info.throw_exc.__cause__ = nursery._exception[0][1]
 
                 possible_owner_task_info = watcher_task_info
 
-                # TODO: Validate algorithm.
+                # FIXME: Validate algorithm.
                 # Looks like passing Nursery between siblings is not supported at all.
                 while possible_owner_task_info:
                     if possible_owner_task_info.child_nursery == nursery:

@@ -69,7 +69,7 @@ class socket(object):
 
     def __get_socket_opt_peer_cred(self):
         if self._opt_peer_cred:
-            # TODO: pid, uid, gid order may not be respected by non-Linux *nixes.
+            # FIXME: pid, uid, gid order may not be respected by non-Linux *nixes.
             credentials = self._socket.getsockopt(SOL_SOCKET, self._opt_peer_cred, calcsize("3i"))
 
             return unpack("3i", credentials)
@@ -167,8 +167,8 @@ except ImportError:
     socket._opt_reuse_port = None
 
 try:
-    # TODO: Some OSes support SO_PEERCRED while Python's socket module does not export this constant
-    # TODO: They say SO_PEERCRED equals 17 on most x86/x64 Linuxes
+    # FIXME: Some OSes support SO_PEERCRED while Python's socket module does not export this constant
+    # FIXME: They say SO_PEERCRED equals 17 on most x86/x64 Linuxes
     from socket import SO_PEERCRED
 
     socket._opt_peer_cred = SO_PEERCRED

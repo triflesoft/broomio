@@ -38,7 +38,7 @@ class _LoopSlots(object):
         # SPEED:     self._task_deque.append(task_info)  # THIS IS SLOW
         # SPEED:
 
-        # TODO: Justify determinism.
+        # FIXME: Justify determinism.
         # Making children run in the same tick requires children to be run after parent.
         # Inserting child at the random position after parent is too slow to implement without strong justification.
         self._task_enqueue_old = self._task_deque.append

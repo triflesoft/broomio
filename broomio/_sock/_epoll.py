@@ -192,7 +192,7 @@ class LoopSockEpoll(_LoopSlots):
 
         # If any tasks are scheduled to be run later, do not make them late.
         # Otherwise wait for 5 second.
-        # TODO: Justify timeout value, currently 5 seconds.
+        # FIXME: Justify timeout value, currently 5 seconds.
         timeout = self._time_heapq[0][0] - self._now if len(self._time_heapq) > 0 else 5
         events = self._socket_epoll.poll(timeout)
 
