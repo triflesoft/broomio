@@ -25,6 +25,10 @@ class NurseryError(Exception):
             f'\n\t{repr(exception[1])} @ {repr(exception[0].coro.cr_code)}' for exception in self.exceptions)
 
 
+class CoroutineTracebackException(BaseException):
+    pass
+
+
 class Nursery(object):
     def __init__(self, exception_policy=NurseryExceptionPolicy.Abort, timeout=-1):
         self._children = set()
