@@ -158,7 +158,7 @@ class LoopTaskDeque(_LoopSlots):
     def _task_enqueue_new(self, coro, parent_task_info, stack_frames, parent_nursery):
         child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, parent_nursery)
 
-        if parent_nursery._exceptions:
+        if (parent_nursery._exception_policy == NurseryExceptionPolicy.Abort) and parent_nursery._exceptions:
             child_task_info.throw_exc = TaskAbortError()
 
         parent_nursery._children.add(child_task_info)
