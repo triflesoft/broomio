@@ -23,7 +23,7 @@ class LoopTimeHeapQ(_LoopSlots):
             _, operation, element = heappop(self._time_heapq)
 
             if operation == 0x_01:
-                self._task_enqueue_old(element)
+                self._task_enqueue_one(element)
             elif operation == 0x_02:
                 if type(element) is _TaskInfo:
                     self._task_abort(element)

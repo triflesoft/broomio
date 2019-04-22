@@ -15,13 +15,24 @@ start(4)
 
 class TestScheduler(TestCase):
     def test_scheduler(self):
-        order = []
-
         async def child(index):
             await sleep(index / 10.0)
             order.append(index)
 
-        loop = Loop()
+        order = []
+
+        loop = Loop(execution_order='FIFO')
+
+        for index in range(10):
+            loop.start_soon(child(index))
+
+        loop.run()
+
+        self.assertEqual(order, [index for index in range(10)])
+
+        order = []
+
+        loop = Loop(execution_order='LIFO')
 
         for index in range(10):
             loop.start_soon(child(index))

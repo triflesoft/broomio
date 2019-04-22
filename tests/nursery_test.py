@@ -21,7 +21,7 @@ class TestNursery(TestCase):
             z = x / y
             del z
 
-        async def parent(vars, exception_policy):
+        async def parent_solid(vars, exception_policy):
             try:
                 async with Nursery(exception_policy) as nursery:
                     await nursery.start_soon(child(1, 2))
@@ -34,21 +34,89 @@ class TestNursery(TestCase):
             except NurseryError as ne:
                 vars['exception_number'] = len(ne.exceptions)
 
+        async def parent_split(vars, exception_policy):
+            try:
+                async with Nursery(exception_policy) as nursery:
+                    await nursery.start_soon(child(1, 2))
+                    await nursery.start_soon(child(1, 0))
+                    await nursery.start_soon(child(1, 2))
+                    await sleep(0.1)
+                    await nursery.start_soon(child(1, 0))
+                    await nursery.start_soon(child(1, 2))
+                    await nursery.start_soon(child(1, 0))
+                    await nursery.start_soon(child(1, 2))
+            except NurseryError as ne:
+                vars['exception_number'] = len(ne.exceptions)
+
         vars = {}
-        loop = Loop()
-        loop.start_soon(parent(vars, NurseryExceptionPolicy.Abort))
+        loop = Loop(execution_order='FIFO')
+        loop.start_soon(parent_solid(vars, NurseryExceptionPolicy.Abort))
         loop.run()
         self.assertEqual(vars['exception_number'], 1)
 
         vars = {}
-        loop = Loop()
-        loop.start_soon(parent(vars, NurseryExceptionPolicy.Accumulate))
+        loop = Loop(execution_order='LIFO')
+        loop.start_soon(parent_solid(vars, NurseryExceptionPolicy.Abort))
+        loop.run()
+        self.assertEqual(vars['exception_number'], 1)
+
+        vars = {}
+        loop = Loop(execution_order='FIFO')
+        loop.start_soon(parent_solid(vars, NurseryExceptionPolicy.Accumulate))
         loop.run()
         self.assertEqual(vars['exception_number'], 3)
 
         vars = {}
-        loop = Loop()
-        loop.start_soon(parent(vars, NurseryExceptionPolicy.Ignore))
+        loop = Loop(execution_order='LIFO')
+        loop.start_soon(parent_solid(vars, NurseryExceptionPolicy.Accumulate))
+        loop.run()
+        self.assertEqual(vars['exception_number'], 3)
+
+        vars = {}
+        loop = Loop(execution_order='FIFO')
+        loop.start_soon(parent_solid(vars, NurseryExceptionPolicy.Ignore))
+        loop.run()
+        self.assertNotIn('exception_number', vars)
+
+        vars = {}
+        loop = Loop(execution_order='LIFO')
+        loop.start_soon(parent_solid(vars, NurseryExceptionPolicy.Ignore))
+        loop.run()
+        self.assertNotIn('exception_number', vars)
+
+        vars = {}
+        loop = Loop(execution_order='FIFO')
+        loop.start_soon(parent_split(vars, NurseryExceptionPolicy.Abort))
+        loop.run()
+        self.assertEqual(vars['exception_number'], 1)
+
+        vars = {}
+        loop = Loop(execution_order='LIFO')
+        loop.start_soon(parent_split(vars, NurseryExceptionPolicy.Abort))
+        loop.run()
+        self.assertEqual(vars['exception_number'], 1)
+
+        vars = {}
+        loop = Loop(execution_order='FIFO')
+        loop.start_soon(parent_split(vars, NurseryExceptionPolicy.Accumulate))
+        loop.run()
+        self.assertEqual(vars['exception_number'], 3)
+
+        vars = {}
+        loop = Loop(execution_order='LIFO')
+        loop.start_soon(parent_split(vars, NurseryExceptionPolicy.Accumulate))
+        loop.run()
+        self.assertEqual(vars['exception_number'], 3)
+
+        vars = {}
+        loop = Loop(execution_order='FIFO')
+        loop.start_soon(parent_split(vars, NurseryExceptionPolicy.Ignore))
+        loop.run()
+        self.assertNotIn('exception_number', vars)
+
+        vars = {}
+        loop = Loop(execution_order='LIFO')
+        loop.start_soon(parent_split(vars, NurseryExceptionPolicy.Ignore))
         loop.run()
         self.assertNotIn('exception_number', vars)
 
@@ -73,7 +141,14 @@ class TestNursery(TestCase):
 
 
         vars = {}
-        loop = Loop()
+        loop = Loop(execution_order='FIFO')
+        loop.start_soon(parent(vars))
+        loop.run()
+        self.assertEqual(vars['count_enter'], 2)
+        self.assertEqual(vars['count_exit'], 1)
+
+        vars = {}
+        loop = Loop(execution_order='LIFO')
         loop.start_soon(parent(vars))
         loop.run()
         self.assertEqual(vars['count_enter'], 2)
@@ -122,7 +197,14 @@ class TestNursery(TestCase):
                 pass
 
         vars = {}
-        loop = Loop()
+        loop = Loop(execution_order='FIFO')
+        loop.start_soon(parent(vars))
+        loop.run()
+        self.assertEqual(vars['count_enter'], 6)
+        self.assertEqual(vars['count_exit'], 2)
+
+        vars = {}
+        loop = Loop(execution_order='LIFO')
         loop.start_soon(parent(vars))
         loop.run()
         self.assertEqual(vars['count_enter'], 6)
@@ -154,7 +236,14 @@ class TestNursery(TestCase):
                 pass
 
         vars = {}
-        loop = Loop()
+        loop = Loop(execution_order='FIFO')
+        loop.start_soon(parent(vars))
+        loop.run()
+        self.assertEqual(vars['count_enter'], 3)
+        self.assertEqual(vars['count_exit'], 1)
+
+        vars = {}
+        loop = Loop(execution_order='LIFO')
         loop.start_soon(parent(vars))
         loop.run()
         self.assertEqual(vars['count_enter'], 3)
@@ -163,4 +252,3 @@ class TestNursery(TestCase):
 
 if __name__ == '__main__':
     main()
-

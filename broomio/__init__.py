@@ -26,7 +26,8 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
             except ValueError:
                 break
 
-        self._task_enqueue_new(coro, None, reversed(stack_frames), self._task_nursery)
+        self._task_enqueue_one(
+            self._task_create_new(coro, None, reversed(stack_frames), self._task_nursery))
 
     def run(self):
         # True if there are any tasks scheduled.

@@ -35,11 +35,12 @@ class LoopSockEpoll(_LoopSlots):
                     f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
                 client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
                 handler = handler_factory(socket(sock=client_socket), client_address)
-                self._task_enqueue_new(handler, task_info, stack_frames, nursery)
+                self._task_enqueue_one(
+                    self._task_create_new(handler, task_info, stack_frames, nursery))
         except OSError:
             pass
 
-        self._task_enqueue_old(task_info)
+        self._task_enqueue_one(task_info)
 
     def _sock_send(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
@@ -53,7 +54,7 @@ class LoopSockEpoll(_LoopSlots):
         except OSError as e:
             task_info.throw_exc = e
 
-        self._task_enqueue_old(task_info)
+        self._task_enqueue_one(task_info)
 
     def _sock_sendto(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
@@ -67,7 +68,7 @@ class LoopSockEpoll(_LoopSlots):
         except OSError as e:
             task_info.throw_exc = e
 
-        self._task_enqueue_old(task_info)
+        self._task_enqueue_one(task_info)
 
     def _sock_recv(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
@@ -81,7 +82,7 @@ class LoopSockEpoll(_LoopSlots):
         except OSError as e:
             task_info.throw_exc = e
 
-        self._task_enqueue_old(task_info)
+        self._task_enqueue_one(task_info)
 
     def _sock_recv_into(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
@@ -95,7 +96,7 @@ class LoopSockEpoll(_LoopSlots):
         except OSError as e:
             task_info.throw_exc = e
 
-        self._task_enqueue_old(task_info)
+        self._task_enqueue_one(task_info)
 
     def _sock_recvfrom(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
@@ -109,7 +110,7 @@ class LoopSockEpoll(_LoopSlots):
         except OSError as e:
             task_info.throw_exc = e
 
-        self._task_enqueue_old(task_info)
+        self._task_enqueue_one(task_info)
 
     def _sock_recvfrom_into(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
@@ -123,7 +124,7 @@ class LoopSockEpoll(_LoopSlots):
         except OSError as e:
             task_info.throw_exc = e
 
-        self._task_enqueue_old(task_info)
+        self._task_enqueue_one(task_info)
 
     def _sock_shutdown(self, task_info, socket_info):
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
@@ -136,7 +137,7 @@ class LoopSockEpoll(_LoopSlots):
         except OSError as e:
             task_info.throw_exc = e
 
-        self._task_enqueue_old(task_info)
+        self._task_enqueue_one(task_info)
 
     def _sock_close(self, task_info, socket_info):
         assert socket_info.event_mask == 0, \
@@ -149,7 +150,7 @@ class LoopSockEpoll(_LoopSlots):
         socket_info.recv_ready = False
         socket_info.send_ready = False
 
-        self._task_enqueue_old(task_info)
+        self._task_enqueue_one(task_info)
 
     def _epoll_register(self, socket_info, event_mask):
         # Find all bits in new event mask, which are not present in old event mask. \
@@ -222,7 +223,7 @@ class LoopSockEpoll(_LoopSlots):
                 if socket_info.send_task_info:
                     socket_info.send_task_info.send_fileno = None
                     socket_info.send_task_info.throw_exc = exception
-                    self._task_enqueue_old(socket_info.send_task_info)
+                    self._task_enqueue_one(socket_info.send_task_info)
                     socket_info.send_task_info = None
                     self._socket_task_count -= 1
 
@@ -230,7 +231,7 @@ class LoopSockEpoll(_LoopSlots):
                 if socket_info.recv_task_info:
                     socket_info.recv_task_info.recv_fileno = None
                     socket_info.recv_task_info.throw_exc = exception
-                    self._task_enqueue_old(socket_info.recv_task_info)
+                    self._task_enqueue_one(socket_info.recv_task_info)
                     socket_info.recv_task_info = None
                     self._socket_task_count -= 1
 
@@ -294,7 +295,7 @@ class LoopSockEpoll(_LoopSlots):
                             # Connect.
                             sock, addr = task_info.yield_args
                             # Connection complete.
-                            self._task_enqueue_old(task_info)
+                            self._task_enqueue_one(task_info)
 
                             socket_info.kind = SOCKET_KIND_CLIENT_CONNECTION
 

@@ -97,7 +97,7 @@ class LoopTaskDeque(_LoopSlots):
 
                     possible_owner_task_info = possible_owner_task_info.parent_task_info
 
-                self._task_enqueue_old(watcher_task_info)
+                self._task_enqueue_one(watcher_task_info)
 
     def _task_abort(self, task_info):
         # Throw exception in task.
@@ -117,7 +117,7 @@ class LoopTaskDeque(_LoopSlots):
             self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN
 
             # Enqueue task.
-            self._task_enqueue_old(task_info)
+            self._task_enqueue_one(task_info)
 
             return 'sock/recv'
 
@@ -135,7 +135,7 @@ class LoopTaskDeque(_LoopSlots):
             self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
 
             # Enqueue task.
-            self._task_enqueue_old(task_info)
+            self._task_enqueue_one(task_info)
 
             return 'sock/send'
 
@@ -148,26 +148,18 @@ class LoopTaskDeque(_LoopSlots):
 
                 if (operation == 0x_01) and (time_task_info == task_info):
                     self._time_heapq.pop(index)
-                    self._task_enqueue_old(task_info)
+                    self._task_enqueue_one(task_info)
 
                     return 'time'
                 index += 1
         except ValueError:
             pass
 
-    def _task_enqueue_new(self, coro, parent_task_info, stack_frames, parent_nursery):
-        child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, parent_nursery)
-
-        if (parent_nursery._exception_policy == NurseryExceptionPolicy.Abort) and parent_nursery._exceptions:
-            child_task_info.throw_exc = TaskAbortError()
-
-        parent_nursery._children.add(child_task_info)
-        self._task_enqueue_old(child_task_info)
-
-    def _task_enqueue_new_delay(self, coro, parent_task_info, stack_frames, parent_nursery, delay):
+    def _task_create_new(self, coro, parent_task_info, stack_frames, parent_nursery):
         child_task_info = _TaskInfo(coro, parent_task_info, stack_frames, parent_nursery)
         parent_nursery._children.add(child_task_info)
-        heappush(self._time_heapq, (self._now + delay, 0x_01, child_task_info))
+
+        return child_task_info
 
     def _process_task(self):
         # Cycle while there are tasks ready for execution. New tasks may be enqueued while this loop cycles.
@@ -263,7 +255,7 @@ class LoopTaskDeque(_LoopSlots):
                         heappush(self._time_heapq, (self._now + delay, 0x_01, task_info))
                     else:
                         # Otherwise enqueue task to be executed in current tick.
-                        self._task_enqueue_old(task_info)
+                        self._task_enqueue_one(task_info)
 
                     del delay
                 elif task_info.yield_func == SYSCALL_NURSERY_INIT:
@@ -272,7 +264,7 @@ class LoopTaskDeque(_LoopSlots):
                     nursery._task_info = task_info
                     task_info.child_nursery = nursery
                     task_info.send_args = nursery
-                    self._task_enqueue_old(task_info)
+                    self._task_enqueue_one(task_info)
 
                     if nursery._timeout > 0:
                         heappush(self._time_heapq, (self._now + nursery._timeout, 0x_02, nursery))
@@ -286,7 +278,7 @@ class LoopTaskDeque(_LoopSlots):
                     if len(nursery._children) > 0:
                         nursery._watchers.add(task_info)
                     else:
-                        self._task_enqueue_old(task_info)
+                        self._task_enqueue_one(task_info)
 
                     del nursery
                 elif task_info.yield_func == SYSCALL_NURSERY_KILL:
@@ -299,7 +291,7 @@ class LoopTaskDeque(_LoopSlots):
 
                     # Enqueue task to be executed in current tick.
                     task_info.throw_exc = exception
-                    self._task_enqueue_old(task_info)
+                    self._task_enqueue_one(task_info)
 
                     del nursery
                     del exception_type
@@ -310,10 +302,13 @@ class LoopTaskDeque(_LoopSlots):
                     nursery, coro = task_info.yield_args
                     # Extract parent coroutine call chain frames.
                     stack_frames = _get_coro_stack_frames(task_info.coro)
-                    # Enqueue child task. Current task will be parent.
-                    self._task_enqueue_new(coro, task_info, stack_frames, nursery)
-                    # Enqueue current (parent) task.
-                    self._task_enqueue_old(task_info)
+                    # Create child task.
+                    child_task_info = self._task_create_new(coro, task_info, stack_frames, nursery)
+                    # Cancel child task right away if required.
+                    if (nursery._exception_policy == NurseryExceptionPolicy.Abort) and nursery._exceptions:
+                        child_task_info.throw_exc = TaskAbortError()
+                    # Enqueue current (parent) and child tasks.
+                    self._task_enqueue_many(*(task_info, child_task_info))
 
                     del coro
                     del nursery
@@ -323,17 +318,24 @@ class LoopTaskDeque(_LoopSlots):
                     delay = float(delay)
                     # Extract parent coroutine call chain frames.
                     stack_frames = _get_coro_stack_frames(task_info.coro)
+                    # Create child task.
+                    child_task_info = self._task_create_new(coro, task_info, stack_frames, nursery)
+                    # Cancel child task right away if required.
+                    if (nursery._exception_policy == NurseryExceptionPolicy.Abort) and nursery._exceptions:
+                        child_task_info.throw_exc = TaskAbortError()
 
-                    # Is delay greater than zero?
-                    if delay > 0:
-                        # Enqueue child task. Current task will be parent.
-                        self._task_enqueue_new_delay(coro, task_info, stack_frames, nursery, delay)
+                        # Enqueue current (parent) and child tasks.
+                        self._task_enqueue_many(*(task_info, child_task_info))
                     else:
-                        # Enqueue child task. Current task will be parent.
-                        self._task_enqueue_new(coro, task_info, stack_frames, nursery)
-
-                    # Enqueue current (parent) task.
-                    self._task_enqueue_old(task_info)
+                        # Is delay less than or equal zero
+                        if delay <= 0:
+                            # Enqueue current (parent) and child tasks.
+                            self._task_enqueue_many(*(task_info, child_task_info))
+                        else:
+                            # Enqueue current (parent) task.
+                            self._task_enqueue_one(task_info)
+                            # Enqueue child task. Current task will be parent.
+                            heappush(self._time_heapq, (self._now + delay, 0x_01, child_task_info))
 
                     del stack_frames
                     del delay
@@ -489,7 +491,7 @@ class LoopTaskDeque(_LoopSlots):
 
                     sock.listen(backlog)
                     socket_info.kind = SOCKET_KIND_SERVER_LISTENING
-                    self._task_enqueue_old(task_info)
+                    self._task_enqueue_one(task_info)
 
                     del socket_info
                     del fileno

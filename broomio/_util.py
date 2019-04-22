@@ -2,6 +2,7 @@ from ._sock import _SelectFakeEPoll
 from ._sock import _SocketInfo
 from ._task import Nursery
 from collections import deque
+from random import randint
 
 
 def _get_coro_stack_frames(coro):
@@ -23,22 +24,52 @@ class _LoopSlots(object):
     __slots__ = \
         '_info', \
         '_task_deque', '_task_nursery', \
-        '_task_enqueue_old', \
+        '_task_enqueue_one', \
+        '_task_enqueue_many', \
         '_time_heapq', '_now', \
         '_sock_array', '_get_sock_info', '_socket_wait_count', '_socket_task_count', '_socket_epoll'
 
-    def __init__(self, technology=None):
+    def _task_enqueue_many_fifo(self, *task_infos):
+        for task_info in task_infos:
+            self._task_deque.appendleft(task_info)
+
+    def _task_enqueue_many_lifo(self, *task_infos):
+        for task_info in reversed(task_infos):
+            self._task_deque.append(task_info)
+
+    def __init__(self, technology=None, execution_order=None):
         # Deque with tasks ready to be executed. These are new tasks or tasks for which requested syscall completed.
         self._task_deque = deque()
 
-        # SPEED: Much faster than declaring method, which calls method. \
-        # SPEED: def _task_enqueue_old(self, task_info): # THIS IS SLOW \
-        # SPEED:     self._task_deque.append(task_info)  # THIS IS SLOW \
+        # Task execution order cannot be deterministic, because we do not want to keep unintended assumptions hidden
+        # until some unrelated refactoring breaks expected task execution order and introduces Mandelbug. Task execution
+        # order should not be assumed in any way. However truly random execution order is not acceptable either, since
+        # inserting task in the middle of any general purpose data structure: stack, array, queue, or linked list is not
+        # O(1) and thus too expensive. Thus, implemented practical decision is to make execution order either FIFO or
+        # LIFO on random. However this is not end of story. There are special cases of Nursery.start_soon and
+        # Nursery.start_later. These syscalls enqueue two tasks: parent and child. Nursery.start_soon always enqueues
+        # two tasks and Nursery.start_later may enqueue two tasks if delay is zero or less. No matter what task
+        # execution order was choosen, to make Nursery machinery work correctly parent should countinue execution before
+        # child starts execution. Otherwise multiple children may throw exceptions which will not be properly processed.
+        # Tasks are always dequeued by popping from right. So deque.appendleft should be used for FIFO and deque.append
+        # should be used for LIFO.
+        if not execution_order:
+            execution_order = 'FIFO' if (randint(0, 1) == 0) else 'LIFO'
 
-        # FIXME: Justify determinism. \
-        # Making children run in the same tick requires children to be run after parent. \
-        # Inserting child at the random position after parent is too slow to implement without strong justification.
-        self._task_enqueue_old = self._task_deque.append
+        assert execution_order in ('FIFO', 'LIFO'), 'Value of execution_order must be either "FIFO" or "LIFO".'
+
+        if execution_order == 'FIFO':
+            # SPEED: Much faster than declaring method, which calls method. \
+            # SPEED: def _task_enqueue_one(self, task_info): # THIS IS SLOW \
+            # SPEED:     self._task_deque.append(task_info)  # THIS IS SLOW \
+            self._task_enqueue_one = self._task_deque.appendleft
+            self._task_enqueue_many = self._task_enqueue_many_fifo
+        else:
+            # SPEED: Much faster than declaring method, which calls method. \
+            # SPEED: def _task_enqueue_one(self, task_info): # THIS IS SLOW \
+            # SPEED:     self._task_deque.append(task_info)  # THIS IS SLOW \
+            self._task_enqueue_one = self._task_deque.append
+            self._task_enqueue_many = self._task_enqueue_many_lifo
 
         # Root nursery.
         self._task_nursery = Nursery()
