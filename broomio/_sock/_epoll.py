@@ -22,7 +22,7 @@ class LoopSockEpoll(_LoopSlots):
     def _sock_accept(self, task_info, socket_info):
         assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, \
             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
-        # Accept as many connections as possible.
+
         sock, nursery, handler_factory = task_info.yield_args
         # Extract parent coroutine call chain frames.
         stack_frames = _get_coro_stack_frames(task_info.coro)
@@ -35,8 +35,8 @@ class LoopSockEpoll(_LoopSlots):
                     f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
                 client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
                 handler = handler_factory(socket(sock=client_socket), client_address)
-                self._task_enqueue_one(
-                    self._task_create_new(handler, task_info, stack_frames, nursery))
+                child_task_info = self._task_create_new(handler, task_info, stack_frames, nursery)
+                self._task_enqueue_one(child_task_info)
         except OSError:
             pass
 

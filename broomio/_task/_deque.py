@@ -103,7 +103,7 @@ class LoopTaskDeque(_LoopSlots):
         # Throw exception in task.
         task_info.throw_exc = TaskAbortError()
 
-        if not task_info.recv_fileno is None:
+        if task_info.recv_fileno:
             # This task is waiting for socket to become readable.
             socket_info = self._get_sock_info(task_info.recv_fileno)
 
@@ -121,7 +121,7 @@ class LoopTaskDeque(_LoopSlots):
 
             return 'sock/recv'
 
-        if not task_info.send_fileno is None:
+        if task_info.send_fileno:
             # This task is waiting for socket to become writable.
             socket_info = self._get_sock_info(task_info.send_fileno)
 
@@ -170,12 +170,12 @@ class LoopTaskDeque(_LoopSlots):
 
             try:
                 # Should we throw an exception?
-                if not task_info.throw_exc is None:
+                if task_info.throw_exc:
                     # Go through parent task linked list and build call chain
                     frame_task_infos = []
                     frame_task_info = task_info
 
-                    while not frame_task_info is None:
+                    while frame_task_info:
                         frame_task_infos.append(frame_task_info)
                         frame_task_info = frame_task_info.parent_task_info
 

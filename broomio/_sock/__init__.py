@@ -181,6 +181,7 @@ SOCKET_KIND_SERVER_LISTENING  = 'L'
 SOCKET_KIND_SERVER_CONNECTION = 'S'
 SOCKET_KIND_CLIENT_CONNECTION = 'C'
 
+
 class _SocketInfo(object):
     __slots__ = \
         'fileno', \
