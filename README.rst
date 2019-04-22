@@ -28,7 +28,6 @@ First of all, you'll need a loop. Loops are common concept in async libraries. B
     from broomio import Loop
 
     loop = Loop()
-
     loop.run()
 
 However this loop has nothing to do and will exit immediately. Lets add some coroutine and execute it a few times. Read more about coroutines in `PEP 0492 <https://www.python.org/dev/peps/pep-0492/>`_.
@@ -100,6 +99,6 @@ Output will be similar
     2 stopped at 1456789017.0171447
     3 stopped at 1456789017.0166693
 
-Difference is that coroutines actually work in context of single thread. There are no operating system level threads or anything similar, it's pure user code solutiion. Kernel is not aware of coroutines.
+Difference is that coroutines actually work in context of single thread. There are no operating system level threads or anything similar, it's pure user code solution. Kernel is not aware of coroutines.
 
 Find more examples in `corresponding folder <examples>`_ in source code.
