@@ -1,9 +1,8 @@
 from collections import deque
+from random import randint
 from ._sock import _SelectFakeEPoll
 from ._sock import _SocketInfo
 from ._task import Nursery
-from collections import deque
-from random import randint
 
 
 def _get_coro_stack_frames(coro):
