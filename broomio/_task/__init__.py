@@ -1,10 +1,10 @@
+from enum import Enum
+from types import coroutine
 from .._syscalls import SYSCALL_NURSERY_INIT
 from .._syscalls import SYSCALL_NURSERY_JOIN
 from .._syscalls import SYSCALL_NURSERY_KILL
 from .._syscalls import SYSCALL_NURSERY_START_LATER
 from .._syscalls import SYSCALL_NURSERY_START_SOON
-from enum import Enum
-from types import coroutine
 
 
 class NurseryExceptionPolicy(Enum):
@@ -15,6 +15,7 @@ class NurseryExceptionPolicy(Enum):
 
 class NurseryError(Exception):
     def __init__(self, exceptions):
+        super().__init__()
         self.exceptions = exceptions
 
     def __repr__(self):
@@ -29,7 +30,7 @@ class CoroutineTracebackException(BaseException):
     pass
 
 
-class Nursery(object):
+class Nursery:
     __slots__ = \
         '_children', '_watchers', \
         '_exception_policy', '_exceptions', \
@@ -50,12 +51,12 @@ class Nursery(object):
 
     @coroutine
     def __aexit__(self, exception_type, exception, traceback):
-        if exception_type is None:
-            # Wait for all nursery tasks to be finished.
-            return (yield SYSCALL_NURSERY_JOIN, self)
-        else:
+        if exception_type:
             # Cancel all nursery tasks.
             return (yield SYSCALL_NURSERY_KILL, self, exception_type, exception, traceback)
+
+        # Wait for all nursery tasks to be finished.
+        return (yield SYSCALL_NURSERY_JOIN, self)
 
     @coroutine
     def start_soon(self, coro):
@@ -66,7 +67,7 @@ class Nursery(object):
         return (yield SYSCALL_NURSERY_START_LATER, self, coro, delay)
 
 
-class _TaskInfo(object):
+class _TaskInfo:
     __slots__ = \
         'coro', \
         'yield_func', 'yield_args', \
@@ -121,4 +122,3 @@ class _TaskInfo(object):
 
     def __hash__(self):
         return id(self)
-

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-from broomio import Loop
-from broomio import Nursery
-from broomio import TcpListenSocket
 from datetime import datetime
-from httptools import HttpRequestParser
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from os.path import dirname
+from httptools import HttpRequestParser
+from broomio import Loop
+from broomio import Nursery
+from broomio import TcpListenSocket
 
 
 HEAD_TEMPLATE = b'''HTTP/1.1 200 OK
@@ -101,6 +101,7 @@ async def listener():
             await tcp_listen_socket.accept(nursery, connection_handler)
 
 
-loop = Loop()
-loop.start_soon(listener())
-loop.run()
+if __name__ == '__main__':
+    loop = Loop()
+    loop.start_soon(listener())
+    loop.run()

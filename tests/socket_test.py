@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
 
-from broomio import Loop
-from broomio import Nursery
-from broomio import sleep
-from broomio import TcpClientSocket
-from broomio import TcpListenSocket
-from broomio import UdpSocket
-from broomio import UnixClientSocket
-from broomio import UnixListenSocket
 from socket import AF_INET
 from socket import AF_INET6
 from socket import AF_UNIX
@@ -17,6 +9,14 @@ from time import time
 from tracemalloc import start
 from unittest import main
 from unittest import TestCase
+from broomio import Loop
+from broomio import Nursery
+from broomio import sleep
+from broomio import TcpClientSocket
+from broomio import TcpListenSocket
+from broomio import UdpSocket
+from broomio import UnixClientSocket
+from broomio import UnixListenSocket
 
 
 start(4)

@@ -1,3 +1,6 @@
+from heapq import heapify
+from heapq import heappush
+from types import TracebackType
 from . import _TaskInfo
 from . import CoroutineTracebackException
 from . import NurseryError
@@ -23,12 +26,9 @@ from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
 from .._syscalls import SYSCALL_TASK_SLEEP
 from .._util import _get_coro_stack_frames
 from .._util import _LoopSlots
-from heapq import heapify
-from heapq import heappush
-from types import TracebackType
 
 
-SYSCALL_SOCKET_READ  = set([
+SYSCALL_SOCKET_READ = set([
     SYSCALL_SOCKET_ACCEPT,
     SYSCALL_SOCKET_RECV,
     SYSCALL_SOCKET_RECV_INTO,
@@ -79,7 +79,7 @@ class LoopTaskDeque(_LoopSlots):
 
     def _nursery_notify_watchers(self, nursery):
         # Was that task the last nursery child?
-        if len(nursery._children) == 0:
+        if not nursery._children:
             # Notify all watchers.
             for watcher_task_info in nursery._watchers:
                 if nursery._exceptions:
@@ -114,7 +114,7 @@ class LoopTaskDeque(_LoopSlots):
             task_info.recv_fileno = None
             socket_info.recv_task_info = None
             self._socket_task_count -= 1
-            self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN
+            self._epoll_unregister(socket_info, 0x_0001) # EPOLLIN. pylint: disable=E1101
 
             # Enqueue task.
             self._task_enqueue_one(task_info)
@@ -132,7 +132,7 @@ class LoopTaskDeque(_LoopSlots):
             task_info.send_fileno = None
             socket_info.send_task_info = None
             self._socket_task_count -= 1
-            self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT
+            self._epoll_unregister(socket_info, 0x_0004) # EPOLLOUT. pylint: disable=E1101
 
             # Enqueue task.
             self._task_enqueue_one(task_info)
@@ -163,7 +163,7 @@ class LoopTaskDeque(_LoopSlots):
 
     def _process_task(self):
         # Cycle while there are tasks ready for execution. New tasks may be enqueued while this loop cycles.
-        while len(self._task_deque) > 0:
+        while self._task_deque:
             # Get next task.
             task_info = self._task_deque.pop()
             coro_succeeded = False
@@ -186,7 +186,11 @@ class LoopTaskDeque(_LoopSlots):
 
                     for frame_task_info in frame_task_infos:
                         for stack_frame in frame_task_info.stack_frames:
-                            prev_traceback = TracebackType(prev_traceback, stack_frame, stack_frame.f_lasti, stack_frame.f_lineno)
+                            prev_traceback = TracebackType(
+                                prev_traceback,
+                                stack_frame,
+                                stack_frame.f_lasti,
+                                stack_frame.f_lineno)
 
                     # Fake traceback is provided as __cause__, because otherwise, if provided as third argument of \
                     # coro.throw, then fake parent coroutine state is corrupted.
@@ -201,6 +205,7 @@ class LoopTaskDeque(_LoopSlots):
                         #   type(task_info.throw_exc), \
                         #   task_info.throw_exc, \
                         #   prev_traceback) # THIS CAUSES PROBLEMS
+                        # pylint: disable=C0301
                         task_info.yield_func, *task_info.yield_args = task_info.coro.throw(type(task_info.throw_exc), task_info.throw_exc)
                     finally:
                         # Clean up throw_exc. If any exception will be thrown, throw_exc will be assigned accordingly.
@@ -232,7 +237,7 @@ class LoopTaskDeque(_LoopSlots):
                 self._nursery_notify_watchers(parent_nursery)
 
                 del parent_nursery
-            except Exception as child_exception:
+            except Exception as child_exception: # pylint: disable=W0703
                 # Task failed, exception thrown. Remove child task from parent_nursery.
                 parent_nursery = task_info.parent_nursery
                 parent_nursery._children.remove(task_info)
@@ -275,7 +280,7 @@ class LoopTaskDeque(_LoopSlots):
                     # Wait for all nursery tasks to be finished.
                     nursery = task_info.yield_args[0]
 
-                    if len(nursery._children) > 0:
+                    if nursery._children:
                         nursery._watchers.add(task_info)
                     else:
                         self._task_enqueue_one(task_info)
@@ -359,19 +364,20 @@ class LoopTaskDeque(_LoopSlots):
                         # Socket is already ready for reading.
                         socket_info.recv_ready = False
 
+                        # pylint: disable=C0301
                         assert socket_info.recv_task_info is None, \
                             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
                         if task_info.yield_func == SYSCALL_SOCKET_ACCEPT:
-                            self._sock_accept(task_info, socket_info)
+                            self._sock_accept(task_info, socket_info) # pylint: disable=E1101
                         elif task_info.yield_func == SYSCALL_SOCKET_RECV:
-                            self._sock_recv(task_info, socket_info)
+                            self._sock_recv(task_info, socket_info) # pylint: disable=E1101
                         elif task_info.yield_func == SYSCALL_SOCKET_RECV_INTO:
-                            self._sock_recv_into(task_info, socket_info)
+                            self._sock_recv_into(task_info, socket_info) # pylint: disable=E1101
                         elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM:
-                            self._sock_recvfrom(task_info, socket_info)
+                            self._sock_recvfrom(task_info, socket_info) # pylint: disable=E1101
                         elif task_info.yield_func == SYSCALL_SOCKET_RECVFROM_INTO:
-                            self._sock_recvfrom_into(task_info, socket_info)
+                            self._sock_recvfrom_into(task_info, socket_info) # pylint: disable=E1101
                         else:
                             assert False, f'Unexpected syscall {task_info.yield_func}.'
                     else:
@@ -379,7 +385,7 @@ class LoopTaskDeque(_LoopSlots):
                         socket_info.recv_task_info = task_info
                         self._socket_task_count += 1
                         task_info.recv_fileno = fileno
-                        self._epoll_register(socket_info, 0x_0001) # EPOLLIN
+                        self._epoll_register(socket_info, 0x_0001) # EPOLLIN. pylint: disable=E1101
 
                     del socket_info
                     del fileno
@@ -401,47 +407,48 @@ class LoopTaskDeque(_LoopSlots):
                         # Socket is already ready for writing.
                         socket_info.send_ready = False
 
+                        # pylint: disable=C0301
                         assert socket_info.send_task_info is None, \
                             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
                         if task_info.yield_func == SYSCALL_SOCKET_CLOSE:
                             # Close socket.
-                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT. pylint: disable=E1101
 
                             if socket_info.recv_task_info:
                                 socket_info.recv_task_info.recv_fileno = None
                                 socket_info.recv_task_info = None
                                 self._socket_task_count -= 1
 
-                            self._sock_close(task_info, socket_info)
+                            self._sock_close(task_info, socket_info) # pylint: disable=E1101
                         elif task_info.yield_func == SYSCALL_SOCKET_SEND:
-                            self._sock_send(task_info, socket_info)
+                            self._sock_send(task_info, socket_info) # pylint: disable=E1101
                         elif task_info.yield_func == SYSCALL_SOCKET_SENDTO:
-                            self._sock_sendto(task_info, socket_info)
+                            self._sock_sendto(task_info, socket_info) # pylint: disable=E1101
                         elif task_info.yield_func == SYSCALL_SOCKET_SHUTDOWN:
-                            self._sock_shutdown(task_info, socket_info)
+                            self._sock_shutdown(task_info, socket_info) # pylint: disable=E1101
                         else:
                             assert False, f'Unexpected syscall {task_info.yield_func}.'
                     else:
                         if (task_info.yield_func == SYSCALL_SOCKET_CLOSE) and \
-                            ((socket_info.kind == SOCKET_KIND_UNKNOWN) or (socket_info.kind == SOCKET_KIND_SERVER_LISTENING)):
+                            (socket_info.kind in (SOCKET_KIND_UNKNOWN, SOCKET_KIND_SERVER_LISTENING)):
                             # Close socket.
                             socket_info.send_task_info = None
                             self._socket_task_count -= 1
-                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                            self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT. pylint: disable=E1101
 
                             if socket_info.recv_task_info:
                                 socket_info.recv_task_info.recv_fileno = None
                                 socket_info.recv_task_info = None
                                 self._socket_task_count -= 1
 
-                            self._sock_close(task_info, socket_info)
+                            self._sock_close(task_info, socket_info) # pylint: disable=E1101
                         else:
                             # Socket is not yet ready for writing. # Bind task and socket.
                             socket_info.send_task_info = task_info
                             self._socket_task_count += 1
                             task_info.send_fileno = fileno
-                            self._epoll_register(socket_info, 0x_0004) # EPOLLOUT
+                            self._epoll_register(socket_info, 0x_0004) # EPOLLOUT. pylint: disable=E1101
 
                     del socket_info
                     del fileno
@@ -463,7 +470,7 @@ class LoopTaskDeque(_LoopSlots):
                     socket_info.send_task_info = task_info
                     self._socket_task_count += 1
                     task_info.send_fileno = fileno
-                    self._epoll_register(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
+                    self._epoll_register(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT. pylint: disable=E1101
 
                     try:
                         sock.connect(addr)

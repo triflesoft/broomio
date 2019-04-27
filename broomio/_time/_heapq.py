@@ -1,8 +1,8 @@
+from heapq import heappop
+from time import sleep as time_sleep
 from .._task import _TaskInfo
 from .._task import Nursery
 from .._util import _LoopSlots
-from heapq import heappop
-from time import sleep as time_sleep
 
 
 class LoopTimeHeapQ(_LoopSlots):
@@ -19,19 +19,17 @@ class LoopTimeHeapQ(_LoopSlots):
             time_sleep(moment - self._now)
 
         # Run all tasks which are ready to run.
-        while (len(self._time_heapq) > 0) and (self._now >= self._time_heapq[0][0]):
+        while self._time_heapq and (self._now >= self._time_heapq[0][0]):
             _, operation, element = heappop(self._time_heapq)
 
             if operation == 0x_01:
                 self._task_enqueue_one(element)
             elif operation == 0x_02:
-                if type(element) is _TaskInfo:
-                    self._task_abort(element)
-                elif type(element) is Nursery:
-                    self._nursery_abort_children(element)
+                if isinstance(element, _TaskInfo):
+                    self._task_abort(element) # pylint: disable=E1101
+                elif isinstance(element, Nursery):
+                    self._nursery_abort_children(element) # pylint: disable=E1101
                 else:
                     assert False, 'Unexpected time heapq element.'
             else:
                 assert False, 'Unexpected time heapq operation.'
-
-        return True

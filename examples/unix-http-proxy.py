@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
+from httptools import HttpRequestParser
 from broomio import Loop
 from broomio import Nursery
 from broomio import TcpClientSocket
 from broomio import UnixListenSocket
-from httptools import HttpRequestParser
 
 
 class RequestParserCallback:
@@ -91,6 +91,7 @@ async def listener():
             await unix_listen_socket.accept(nursery, connection_handler)
 
 
-loop = Loop()
-loop.start_soon(listener())
-loop.run()
+if __name__ == '__main__':
+    loop = Loop()
+    loop.start_soon(listener())
+    loop.run()

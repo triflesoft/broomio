@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-from broomio import Loop
-from broomio import TcpClientSocket
-from httptools import HttpResponseParser
 from pprint import pprint
 from traceback import print_exc
+from httptools import HttpResponseParser
+from broomio import Loop
+from broomio import TcpClientSocket
 
 
 class ResponseParserCallback:
@@ -59,8 +59,7 @@ async def connector():
     except Exception:
         print_exc()
 
-
-loop = Loop()
-loop.start_soon(connector())
-loop.run()
-
+if __name__ == '__main__':
+    loop = Loop()
+    loop.start_soon(connector())
+    loop.run()

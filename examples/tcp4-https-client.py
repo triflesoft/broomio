@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-from broomio import Loop
-from broomio import TcpClientSocket
-from broomio import TlsSocket
-from httptools import HttpResponseParser
 from pprint import pprint
 from ssl import PROTOCOL_TLS_CLIENT
 from ssl import SSLContext
 from traceback import print_exc
+from httptools import HttpResponseParser
+from broomio import Loop
+from broomio import TcpClientSocket
+from broomio import TlsSocket
 
 
 class ResponseParserCallback:
@@ -78,7 +78,7 @@ async def connector():
         print_exc()
 
 
-loop = Loop()
-loop.start_soon(connector())
-loop.run()
-
+if __name__ == '__main__':
+    loop = Loop()
+    loop.start_soon(connector())
+    loop.run()

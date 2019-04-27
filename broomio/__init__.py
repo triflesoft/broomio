@@ -1,3 +1,5 @@
+from sys import _getframe
+from time import time
 from ._sock import TcpClientSocket
 from ._sock import TcpListenSocket
 from ._sock import TlsSocket
@@ -11,8 +13,6 @@ from ._task import NurseryExceptionPolicy
 from ._task._deque import LoopTaskDeque
 from ._time import sleep
 from ._time._heapq import LoopTimeHeapQ
-from sys import _getframe
-from time import time
 
 
 __all__ = [
@@ -49,10 +49,10 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
             # SPEED: If collection is empty, method is not called.
 
             # Are there tasks ready for execution?
-            if len(self._task_deque) > 0:
+            if self._task_deque:
                 self._process_task()
             # Are there task which are scheduled to run later?
-            elif len(self._time_heapq) > 0:
+            elif self._time_heapq:
                 self._process_time()
             # Are there sockets to check for readiness?
             elif self._socket_wait_count > 0:
@@ -61,5 +61,5 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
                 # Nothing to do, stop loop.
                 running = False
 
-        if len(self._task_nursery._exceptions) > 0:
+        if self._task_nursery._exceptions:
             raise NurseryError(self._task_nursery._exceptions) from self._task_nursery._exceptions[0][1]

@@ -1,5 +1,5 @@
-from .._syscalls import SYSCALL_TASK_SLEEP
 from types import coroutine
+from .._syscalls import SYSCALL_TASK_SLEEP
 
 
 @coroutine

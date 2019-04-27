@@ -1,14 +1,3 @@
-from .._syscalls import SYSCALL_SOCKET_ACCEPT
-from .._syscalls import SYSCALL_SOCKET_CLOSE
-from .._syscalls import SYSCALL_SOCKET_CONNECT
-from .._syscalls import SYSCALL_SOCKET_LISTEN
-from .._syscalls import SYSCALL_SOCKET_RECV
-from .._syscalls import SYSCALL_SOCKET_RECV_INTO
-from .._syscalls import SYSCALL_SOCKET_RECVFROM
-from .._syscalls import SYSCALL_SOCKET_RECVFROM_INTO
-from .._syscalls import SYSCALL_SOCKET_SEND
-from .._syscalls import SYSCALL_SOCKET_SENDTO
-from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
 from collections import defaultdict
 from os import path
 from os import strerror
@@ -30,6 +19,17 @@ from ssl import SSLWantWriteError
 from struct import calcsize
 from struct import unpack
 from types import coroutine
+from .._syscalls import SYSCALL_SOCKET_ACCEPT
+from .._syscalls import SYSCALL_SOCKET_CLOSE
+from .._syscalls import SYSCALL_SOCKET_CONNECT
+from .._syscalls import SYSCALL_SOCKET_LISTEN
+from .._syscalls import SYSCALL_SOCKET_RECV
+from .._syscalls import SYSCALL_SOCKET_RECV_INTO
+from .._syscalls import SYSCALL_SOCKET_RECVFROM
+from .._syscalls import SYSCALL_SOCKET_RECVFROM_INTO
+from .._syscalls import SYSCALL_SOCKET_SEND
+from .._syscalls import SYSCALL_SOCKET_SENDTO
+from .._syscalls import SYSCALL_SOCKET_SHUTDOWN
 
 
 def _get_socket_exception_from_fileno(fileno):
@@ -41,14 +41,14 @@ def _get_socket_exception_from_fileno(fileno):
     return OSError(code, text)
 
 
-class SocketBase(object):
-    __slots__ = '_socket'
+class SocketBase:
+    __slots__ = ('_socket', )
 
     def __get_socket_opt_reuse_addr(self):
         if self._opt_reuse_addr:
             return bool(self._socket.getsockopt(SOL_SOCKET, self._opt_reuse_addr))
-        else:
-            return False
+
+        return False
 
     def __set_socket_opt_reuse_addr(self, value):
         if self._opt_reuse_addr:
@@ -57,8 +57,8 @@ class SocketBase(object):
     def __get_socket_opt_reuse_port(self):
         if self._opt_reuse_port:
             return bool(self._socket.getsockopt(SOL_SOCKET, self._opt_reuse_port))
-        else:
-            return False
+
+        return False
 
     def __set_socket_opt_reuse_port(self, value):
         if self._opt_reuse_port:
@@ -70,6 +70,8 @@ class SocketBase(object):
             credentials = self._socket.getsockopt(SOL_SOCKET, self._opt_peer_cred, calcsize("3i"))
 
             return unpack("3i", credentials)
+
+        return -1, -1, -1
 
     reuse_addr = property(__get_socket_opt_reuse_addr, __set_socket_opt_reuse_addr)
     reuse_port = property(__get_socket_opt_reuse_port, __set_socket_opt_reuse_port)
@@ -99,14 +101,14 @@ class SocketBase(object):
 
 
 try:
-    from socket import SO_REUSEADDR
+    from socket import SO_REUSEADDR # pylint: disable=C0412
 
     SocketBase._opt_reuse_addr = SO_REUSEADDR
 except ImportError:
     SocketBase._opt_reuse_addr = None
 
 try:
-    from socket import SO_REUSEPORT
+    from socket import SO_REUSEPORT # pylint: disable=C0412
 
     SocketBase._opt_reuse_port = SO_REUSEPORT
 except ImportError:
@@ -115,7 +117,7 @@ except ImportError:
 try:
     # FIXME: Some OSes support SO_PEERCRED while Python's socket module does not export this constant. \
     # FIXME: They say SO_PEERCRED equals 17 on most x86/x64 Linuxes
-    from socket import SO_PEERCRED
+    from socket import SO_PEERCRED # pylint: disable=C0412
 
     SocketBase._opt_peer_cred = SO_PEERCRED
 except ImportError:
@@ -265,7 +267,7 @@ class UnixListenSocket(SocketBase):
     def bind(self, addr):
         try:
             unlink(addr)
-        except:
+        except FileNotFoundError:
             if path.exists(addr):
                 raise
 
@@ -280,18 +282,18 @@ class UnixListenSocket(SocketBase):
         return (yield SYSCALL_SOCKET_LISTEN, self._socket, backlog)
 
 
-class TlsSocket(object):
+class TlsSocket:
     __slots__ = '_socket', '_incoming', '_outgoing', '_object'
 
-    def __init__(self, socket, context, server_hostname):
-        self._socket = socket
+    def __init__(self, sock, context, server_hostname):
+        self._socket = sock
         self._incoming = MemoryBIO()
         self._outgoing = MemoryBIO()
         self._object = context.wrap_bio(
             self._incoming,
             self._outgoing,
             server_hostname=server_hostname,
-            server_side=socket.CAN_BE_SERVER)
+            server_side=sock.CAN_BE_SERVER)
 
     async def handshake(self):
         while True:
@@ -364,8 +366,8 @@ class TlsSocket(object):
                     await self._socket.send(self._outgoing.read())
 
 
-SOCKET_KIND_UNKNOWN           = '?'
-SOCKET_KIND_SERVER_LISTENING  = 'L'
+SOCKET_KIND_UNKNOWN = '?'
+SOCKET_KIND_SERVER_LISTENING = 'L'
 SOCKET_KIND_SERVER_CONNECTION = 'S'
 SOCKET_KIND_CLIENT_CONNECTION = 'C'
 
@@ -398,7 +400,7 @@ class _SocketInfo(object):
         self.event_mask = 0
 
 
-class _SelectFakeEPoll(object):
+class _SelectFakeEPoll:
     __slots__ = '_rlist', '_wlist', '_xlist', '_fdict'
 
     def __init__(self):
@@ -407,43 +409,43 @@ class _SelectFakeEPoll(object):
         self._xlist = []
         self._fdict = defaultdict(int)
 
-    def register(self, fd, eventmask):
-        self.modify(fd, eventmask)
+    def register(self, fileno, eventmask):
+        self.modify(fileno, eventmask)
 
-    def unregister(self, fd):
-        self.modify(fd, 0)
+    def unregister(self, fileno):
+        self.modify(fileno, 0)
 
-    def modify(self, fd, eventmask):
+    def modify(self, fileno, eventmask):
         eventmask = eventmask & 0x_0005 # EPOLLIN | # EPOLLOUT
-        old_eventmask = self._fdict[fd]
+        old_eventmask = self._fdict[fileno]
 
         if old_eventmask == 0 and eventmask != 0:
-            self._xlist.append(fd)
+            self._xlist.append(fileno)
 
         if old_eventmask != 0 and eventmask == 0:
-            self._xlist.remove(fd)
+            self._xlist.remove(fileno)
 
         if (old_eventmask ^ eventmask) & 0x_0001 == 0x_0001: # EPOLLIN
             # Read event mask changed
 
             if old_eventmask & 0x_0001 == 0x_0001:
                 # Must stop reading
-                self._rlist.remove(fd)
+                self._rlist.remove(fileno)
             else:
                 # Must start reading
-                self._rlist.append(fd)
+                self._rlist.append(fileno)
 
         if (old_eventmask ^ eventmask) & 0x_0004 == 0x_0004: # EPOLLOUT
             # Write event mask changed
 
             if old_eventmask & 0x_0004 == 0x_0004:
                 # Must stop writing
-                self._wlist.remove(fd)
+                self._wlist.remove(fileno)
             else:
                 # Must start writing
-                self._wlist.append(fd)
+                self._wlist.append(fileno)
 
-        self._fdict[fd] = eventmask
+        self._fdict[fileno] = eventmask
 
     def poll(self, timeout):
         from select import select
@@ -452,14 +454,13 @@ class _SelectFakeEPoll(object):
 
         events = defaultdict(int)
 
-        for fd in rlist:
-            events[fd] |= 0x_0001 # EPOLLIN
+        for fileno in rlist:
+            events[fileno] |= 0x_0001 # EPOLLIN
 
-        for fd in wlist:
-            events[fd] |= 0x_0004 # EPOLLOUT
+        for fileno in wlist:
+            events[fileno] |= 0x_0004 # EPOLLOUT
 
-        for fd in xlist:
-            events[fd] |= 0x_0008 # EPOLLERR
+        for fileno in xlist:
+            events[fileno] |= 0x_0008 # EPOLLERR
 
         return events.items()
-

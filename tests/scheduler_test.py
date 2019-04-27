@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-from broomio import Loop
-from broomio import sleep
 from tracemalloc import start
 from unittest import main
 from unittest import TestCase
+from broomio import Loop
+from broomio import sleep
 
 
 start(4)

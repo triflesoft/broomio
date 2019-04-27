@@ -22,7 +22,7 @@ class LoopSockEpoll(_LoopSlots):
         assert socket_info.kind == SOCKET_KIND_SERVER_LISTENING, \
             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
-        sock, nursery, handler_factory = task_info.yield_args
+        sock, nursery, socket_factory, handler_factory = task_info.yield_args
         # Extract parent coroutine call chain frames.
         stack_frames = _get_coro_stack_frames(task_info.coro)
 
@@ -30,11 +30,14 @@ class LoopSockEpoll(_LoopSlots):
             while True:
                 client_socket, client_address = sock.accept()
                 client_socket_info = self._get_sock_info(client_socket.fileno())
+
+                # pylint: disable=C0301
                 assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, \
                     f'Internal data structures are damaged for socket #{client_socket_info.fileno} ({client_socket_info.kind}).'
+
                 client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
-                handler = handler_factory(socket(sock=client_socket), client_address)
-                child_task_info = self._task_create_new(handler, task_info, stack_frames, nursery)
+                handler = handler_factory(socket_factory(socket_handle=client_socket), client_address)
+                child_task_info = self._task_create_new(handler, task_info, stack_frames, nursery) # pylint: disable=E1101
                 self._task_enqueue_one(child_task_info)
         except OSError:
             pass
@@ -42,6 +45,7 @@ class LoopSockEpoll(_LoopSlots):
         self._task_enqueue_one(task_info)
 
     def _sock_send(self, task_info, socket_info):
+        # pylint: disable=C0301
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
@@ -50,12 +54,13 @@ class LoopSockEpoll(_LoopSlots):
         try:
             size = sock.send(data)
             task_info.send_args = size
-        except OSError as e:
-            task_info.throw_exc = e
+        except OSError as os_error:
+            task_info.throw_exc = os_error
 
         self._task_enqueue_one(task_info)
 
     def _sock_sendto(self, task_info, socket_info):
+        # pylint: disable=C0301
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
@@ -64,12 +69,13 @@ class LoopSockEpoll(_LoopSlots):
         try:
             size = sock.sendto(data, addr)
             task_info.send_args = size
-        except OSError as e:
-            task_info.throw_exc = e
+        except OSError as os_error:
+            task_info.throw_exc = os_error
 
         self._task_enqueue_one(task_info)
 
     def _sock_recv(self, task_info, socket_info):
+        # pylint: disable=C0301
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
@@ -78,12 +84,13 @@ class LoopSockEpoll(_LoopSlots):
         try:
             data = sock.recv(size)
             task_info.send_args = data
-        except OSError as e:
-            task_info.throw_exc = e
+        except OSError as os_error:
+            task_info.throw_exc = os_error
 
         self._task_enqueue_one(task_info)
 
     def _sock_recv_into(self, task_info, socket_info):
+        # pylint: disable=C0301
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
@@ -92,12 +99,13 @@ class LoopSockEpoll(_LoopSlots):
         try:
             size = sock.recv_into(data, size)
             task_info.send_args = size
-        except OSError as e:
-            task_info.throw_exc = e
+        except OSError as os_error:
+            task_info.throw_exc = os_error
 
         self._task_enqueue_one(task_info)
 
     def _sock_recvfrom(self, task_info, socket_info):
+        # pylint: disable=C0301
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
@@ -106,12 +114,13 @@ class LoopSockEpoll(_LoopSlots):
         try:
             data, addr = sock.recvfrom(size)
             task_info.send_args = data, addr
-        except OSError as e:
-            task_info.throw_exc = e
+        except OSError as os_error:
+            task_info.throw_exc = os_error
 
         self._task_enqueue_one(task_info)
 
     def _sock_recvfrom_into(self, task_info, socket_info):
+        # pylint: disable=C0301
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
@@ -120,12 +129,13 @@ class LoopSockEpoll(_LoopSlots):
         try:
             size, addr = sock.recvfrom_into(data, size)
             task_info.send_args = size, addr
-        except OSError as e:
-            task_info.throw_exc = e
+        except OSError as os_error:
+            task_info.throw_exc = os_error
 
         self._task_enqueue_one(task_info)
 
     def _sock_shutdown(self, task_info, socket_info):
+        # pylint: disable=C0301
         assert (socket_info.kind == SOCKET_KIND_SERVER_CONNECTION) or (socket_info.kind == SOCKET_KIND_CLIENT_CONNECTION), \
             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
@@ -133,12 +143,13 @@ class LoopSockEpoll(_LoopSlots):
 
         try:
             sock.shutdown(how)
-        except OSError as e:
-            task_info.throw_exc = e
+        except OSError as os_error:
+            task_info.throw_exc = os_error
 
         self._task_enqueue_one(task_info)
 
     def _sock_close(self, task_info, socket_info):
+        # pylint: disable=C0301
         assert socket_info.event_mask == 0, \
             f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
 
@@ -194,12 +205,12 @@ class LoopSockEpoll(_LoopSlots):
             # There are unclosed sockets. Use the following code to debug \
             # import tracemalloc \
             # tracemalloc.start(10)
-
+            # pylint: disable=C0301
             raise RuntimeWarning('Unclosed sockets with no tasks awaiting them detected. Enable tracemalloc to get the socket allocation traceback.')
 
         # If any tasks are scheduled to be run later, do not make them late; otherwise wait for 5 second. \
         # FIXME: Justify timeout value, currently 5 seconds.
-        timeout = self._time_heapq[0][0] - self._now if len(self._time_heapq) > 0 else 5
+        timeout = self._time_heapq[0][0] - self._now if self._time_heapq else 5
         events = self._socket_epoll.poll(timeout)
 
         for fileno, event in events:

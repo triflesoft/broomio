@@ -1,3 +1,4 @@
+from collections import deque
 from ._sock import _SelectFakeEPoll
 from ._sock import _SocketInfo
 from ._task import Nursery
@@ -20,7 +21,7 @@ def _get_coro_stack_frames(coro):
     return stack_frames
 
 
-class _LoopSlots(object):
+class _LoopSlots:
     __slots__ = \
         '_info', \
         '_task_deque', '_task_nursery', \
@@ -92,7 +93,7 @@ class _LoopSlots(object):
 
             _, nofile_hard = getrlimit(RLIMIT_NOFILE)
             self._sock_array = [_SocketInfo(fileno) for fileno in range(nofile_hard)]
-        except:
+        except ImportError:
             # For Windows: \
             # Dict of sockets. Keys in dict are file descriptors. O(log(N)) access time. \
             # No assumptions about socket file descriptor values' range \
@@ -136,8 +137,8 @@ class _LoopSlots(object):
 
         self._socket_epoll = None
 
-        for technology in technologies:
-            if technology == 'epoll':
+        for tech in technologies:
+            if tech == 'epoll':
                 try:
                     from select import epoll
 
@@ -145,7 +146,7 @@ class _LoopSlots(object):
                     break
                 except ImportError:
                     pass
-            elif technology == 'poll':
+            elif tech == 'poll':
                 try:
                     from select import poll
 
@@ -153,7 +154,7 @@ class _LoopSlots(object):
                     break
                 except ImportError:
                     pass
-            elif technology == 'select':
+            elif tech == 'select':
                 self._socket_epoll = _SelectFakeEPoll()
                 break
 
