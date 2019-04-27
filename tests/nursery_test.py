@@ -5,8 +5,6 @@ from broomio import Nursery
 from broomio import NurseryError
 from broomio import NurseryExceptionPolicy
 from broomio import sleep
-from math import fabs
-from time import time
 from tracemalloc import start
 from unittest import main
 from unittest import TestCase

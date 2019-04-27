@@ -2,14 +2,9 @@
 
 from broomio import Loop
 from broomio import Nursery
-from broomio import sleep
 from broomio import TcpClientSocket
 from broomio import UnixListenSocket
-from datetime import datetime
 from httptools import HttpRequestParser
-from jinja2 import Environment
-from jinja2 import FileSystemLoader
-from os.path import dirname
 
 
 class RequestParserCallback:

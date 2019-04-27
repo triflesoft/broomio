@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
 from broomio import Loop
-from broomio import Nursery
 from broomio import TcpClientSocket
-from broomio import TlsSocket
 from httptools import HttpResponseParser
 from pprint import pprint
 from traceback import print_exc

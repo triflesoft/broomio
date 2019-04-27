@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 
 from broomio import Loop
-from broomio import Nursery
 from broomio import sleep
-from math import fabs
-from time import time
 from tracemalloc import start
 from unittest import main
 from unittest import TestCase

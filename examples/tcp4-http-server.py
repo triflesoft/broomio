@@ -2,7 +2,6 @@
 
 from broomio import Loop
 from broomio import Nursery
-from broomio import sleep
 from broomio import TcpListenSocket
 from datetime import datetime
 from httptools import HttpRequestParser

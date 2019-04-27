@@ -25,7 +25,6 @@ from socket import SOCK_STREAM
 from socket import socket
 from socket import SOL_SOCKET
 from ssl import MemoryBIO
-from ssl import SSLContext
 from ssl import SSLWantReadError
 from ssl import SSLWantWriteError
 from struct import calcsize
