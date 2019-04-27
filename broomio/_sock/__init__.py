@@ -18,34 +18,32 @@ from socket import AF_INET6
 from socket import AF_UNIX
 from socket import IPPROTO_TCP
 from socket import IPPROTO_UDP
+from socket import SHUT_WR
 from socket import SO_ERROR
 from socket import SOCK_DGRAM
 from socket import SOCK_STREAM
+from socket import socket
 from socket import SOL_SOCKET
-from socket import SHUT_WR
+from ssl import MemoryBIO
+from ssl import SSLContext
+from ssl import SSLWantReadError
+from ssl import SSLWantWriteError
 from struct import calcsize
 from struct import unpack
 from types import coroutine
 
 
-def _get_socket_exception(socket):
-    code = socket.getsockopt(SOL_SOCKET, SO_ERROR)
+def _get_socket_exception_from_fileno(fileno):
+    sock = socket(fileno=fileno)
+    code = sock.getsockopt(SOL_SOCKET, SO_ERROR)
     text = strerror(code)
+    sock.detach()
 
     return OSError(code, text)
 
 
-_SOCKET_KINDS = {
-    'unix': (AF_UNIX,  SOCK_STREAM, -1),
-    'tcp4': (AF_INET,  SOCK_STREAM, IPPROTO_TCP),
-    'udp4': (AF_INET,  SOCK_DGRAM,  IPPROTO_UDP),
-    'tcp6': (AF_INET6, SOCK_STREAM, IPPROTO_TCP),
-    'udp6': (AF_INET6, SOCK_DGRAM,  IPPROTO_UDP),
-}
-
-
-class socket(object):
-    __slots__ = '_socket', '_kind_name'
+class SocketBase(object):
+    __slots__ = '_socket'
 
     def __get_socket_opt_reuse_addr(self):
         if self._opt_reuse_addr:
@@ -78,18 +76,13 @@ class socket(object):
     reuse_port = property(__get_socket_opt_reuse_port, __set_socket_opt_reuse_port)
     peer_cred = property(__get_socket_opt_peer_cred)
 
-    def __init__(self, kind_name='tcp4', sock=None):
-        from socket import socket as _socket
-
-        kind = _SOCKET_KINDS[kind_name]
-
-        self._kind_name = kind_name
-
-        if sock is None:
-            self._socket = _socket(kind[0], kind[1], kind[2])
-            self._socket.setblocking(False)
+    def __init__(self, socket_family=None, socket_type=None, socket_protocol=None, socket_handle=None):
+        if socket_handle is None:
+            self._socket = socket(socket_family, socket_type, socket_protocol)
         else:
-            self._socket = sock
+            self._socket = socket_handle
+
+        self._socket.setblocking(False)
 
     def getpeername(self):
         return self._socket.getpeername()
@@ -97,39 +90,51 @@ class socket(object):
     def getsockname(self):
         return self._socket.getsockname()
 
-    def bind(self, addr):
-        if self._kind_name == 'unix':
-            try:
-                unlink(addr)
-            except:
-                if path.exists(addr):
-                    raise
-
-        self._socket.bind(addr)
-
-    @coroutine
-    def accept(self, nursery, handler_factory):
-        return (yield SYSCALL_SOCKET_ACCEPT, self._socket, nursery, handler_factory)
-
     @coroutine
     def close(self):
         return (yield SYSCALL_SOCKET_CLOSE, self._socket)
 
     @coroutine
-    def connect(self, addr):
-        return (yield SYSCALL_SOCKET_CONNECT, self._socket, addr)
+    def shutdown(self):
+        return (yield SYSCALL_SOCKET_SHUTDOWN, self._socket, SHUT_WR)
 
-    @coroutine
-    def listen(self, backlog):
-        return (yield SYSCALL_SOCKET_LISTEN, self._socket, backlog)
 
-    @coroutine
-    def recv(self, size):
-        return (yield SYSCALL_SOCKET_RECV, self._socket, size)
+try:
+    from socket import SO_REUSEADDR
 
-    @coroutine
-    def recv_into(self, data, size):
-        return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
+    SocketBase._opt_reuse_addr = SO_REUSEADDR
+except ImportError:
+    SocketBase._opt_reuse_addr = None
+
+try:
+    from socket import SO_REUSEPORT
+
+    SocketBase._opt_reuse_port = SO_REUSEPORT
+except ImportError:
+    SocketBase._opt_reuse_port = None
+
+try:
+    # FIXME: Some OSes support SO_PEERCRED while Python's socket module does not export this constant. \
+    # FIXME: They say SO_PEERCRED equals 17 on most x86/x64 Linuxes
+    from socket import SO_PEERCRED
+
+    SocketBase._opt_peer_cred = SO_PEERCRED
+except ImportError:
+    SocketBase._opt_peer_cred = None
+
+
+_IP_FAMILY = {
+    4: AF_INET,
+    6: AF_INET6
+}
+
+
+class UdpSocket(SocketBase):
+    def __init__(self, version=4):
+        super().__init__(socket_family=_IP_FAMILY[version], socket_type=SOCK_DGRAM, socket_protocol=IPPROTO_UDP)
+
+    def bind(self, addr):
+        self._socket.bind(addr)
 
     @coroutine
     def recvfrom(self, size):
@@ -140,40 +145,224 @@ class socket(object):
         return (yield SYSCALL_SOCKET_RECVFROM_INTO, self._socket, data, size)
 
     @coroutine
-    def send(self, data):
-        return (yield SYSCALL_SOCKET_SEND, self._socket, data)
-
-    @coroutine
     def sendto(self, data, addr):
         return (yield SYSCALL_SOCKET_SENDTO, self._socket, data, addr)
 
+
+class TcpClientSocket(SocketBase):
+    CAN_BE_CLIENT = True
+    CAN_BE_SERVER = False
+
+    def __init__(self, version=4):
+        super().__init__(socket_family=_IP_FAMILY[version], socket_type=SOCK_STREAM, socket_protocol=IPPROTO_TCP)
+
+    def bind(self, addr):
+        self._socket.bind(addr)
+
     @coroutine
-    def shutdown(self):
-        return (yield SYSCALL_SOCKET_SHUTDOWN, self._socket, SHUT_WR)
+    def connect(self, addr):
+        return (yield SYSCALL_SOCKET_CONNECT, self._socket, addr)
+
+    @coroutine
+    def recv(self, size):
+        return (yield SYSCALL_SOCKET_RECV, self._socket, size)
+
+    @coroutine
+    def recv_into(self, data, size):
+        return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
+
+    @coroutine
+    def send(self, data):
+        return (yield SYSCALL_SOCKET_SEND, self._socket, data)
 
 
-try:
-    from socket import SO_REUSEADDR
+class TcpServerSocket(SocketBase):
+    CAN_BE_CLIENT = False
+    CAN_BE_SERVER = True
 
-    socket._opt_reuse_addr = SO_REUSEADDR
-except ImportError:
-    socket._opt_reuse_addr = None
+    def __init__(self, socket_handle):
+        super().__init__(socket_handle=socket_handle)
 
-try:
-    from socket import SO_REUSEPORT
+    @coroutine
+    def recv(self, size):
+        return (yield SYSCALL_SOCKET_RECV, self._socket, size)
 
-    socket._opt_reuse_port = SO_REUSEPORT
-except ImportError:
-    socket._opt_reuse_port = None
+    @coroutine
+    def recv_into(self, data, size):
+        return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
 
-try:
-    # FIXME: Some OSes support SO_PEERCRED while Python's socket module does not export this constant. \
-    # FIXME: They say SO_PEERCRED equals 17 on most x86/x64 Linuxes
-    from socket import SO_PEERCRED
+    @coroutine
+    def send(self, data):
+        return (yield SYSCALL_SOCKET_SEND, self._socket, data)
 
-    socket._opt_peer_cred = SO_PEERCRED
-except ImportError:
-    socket._opt_peer_cred = None
+
+class TcpListenSocket(SocketBase):
+    def __init__(self, version=4):
+        super().__init__(socket_family=_IP_FAMILY[version], socket_type=SOCK_STREAM, socket_protocol=IPPROTO_TCP)
+
+    def bind(self, addr):
+        self._socket.bind(addr)
+
+    @coroutine
+    def accept(self, nursery, handler_factory):
+        return (yield SYSCALL_SOCKET_ACCEPT, self._socket, nursery, TcpServerSocket, handler_factory)
+
+    @coroutine
+    def listen(self, backlog):
+        return (yield SYSCALL_SOCKET_LISTEN, self._socket, backlog)
+
+
+class UnixClientSocket(SocketBase):
+    CAN_BE_CLIENT = True
+    CAN_BE_SERVER = False
+
+    def __init__(self):
+        super().__init__(socket_family=AF_UNIX, socket_type=SOCK_STREAM, socket_protocol=0)
+
+    def bind(self, addr):
+        self._socket.bind(addr)
+
+    @coroutine
+    def connect(self, addr):
+        return (yield SYSCALL_SOCKET_CONNECT, self._socket, addr)
+
+    @coroutine
+    def recv(self, size):
+        return (yield SYSCALL_SOCKET_RECV, self._socket, size)
+
+    @coroutine
+    def recv_into(self, data, size):
+        return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
+
+    @coroutine
+    def send(self, data):
+        return (yield SYSCALL_SOCKET_SEND, self._socket, data)
+
+
+class UnixServerSocket(SocketBase):
+    CAN_BE_CLIENT = False
+    CAN_BE_SERVER = True
+
+    def __init__(self, socket_handle):
+        super().__init__(socket_handle=socket_handle)
+
+    @coroutine
+    def recv(self, size):
+        return (yield SYSCALL_SOCKET_RECV, self._socket, size)
+
+    @coroutine
+    def recv_into(self, data, size):
+        return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
+
+    @coroutine
+    def send(self, data):
+        return (yield SYSCALL_SOCKET_SEND, self._socket, data)
+
+
+class UnixListenSocket(SocketBase):
+    def __init__(self):
+        super().__init__(socket_family=AF_UNIX, socket_type=SOCK_STREAM, socket_protocol=0)
+
+    def bind(self, addr):
+        try:
+            unlink(addr)
+        except:
+            if path.exists(addr):
+                raise
+
+        self._socket.bind(addr)
+
+    @coroutine
+    def accept(self, nursery, handler_factory):
+        return (yield SYSCALL_SOCKET_ACCEPT, self._socket, nursery, UnixServerSocket, handler_factory)
+
+    @coroutine
+    def listen(self, backlog):
+        return (yield SYSCALL_SOCKET_LISTEN, self._socket, backlog)
+
+
+class TlsSocket(object):
+    __slots__ = '_socket', '_incoming', '_outgoing', '_object'
+
+    def __init__(self, socket, context, server_hostname):
+        self._socket = socket
+        self._incoming = MemoryBIO()
+        self._outgoing = MemoryBIO()
+        self._object = context.wrap_bio(
+            self._incoming,
+            self._outgoing,
+            server_hostname=server_hostname,
+            server_side=socket.CAN_BE_SERVER)
+
+    async def handshake(self):
+        while True:
+            try:
+                self._object.do_handshake()
+
+                return
+            except SSLWantReadError:
+                if self._outgoing.pending:
+                    await self._socket.send(self._outgoing.read())
+
+                self._incoming.write(await self._socket.recv(4096))
+            except SSLWantWriteError:
+                if self._outgoing.pending:
+                    await self._socket.send(self._outgoing.read())
+
+    async def recv(self, size):
+        while True:
+            try:
+                return self._object.read(size)
+            except SSLWantReadError:
+                if self._outgoing.pending:
+                    await self._socket.send(self._outgoing.read())
+
+                data = await self._socket.recv(size)
+                self._incoming.write(data)
+            except SSLWantWriteError:
+                if self._outgoing.pending:
+                    await self._socket.send(self._outgoing.read())
+
+    async def recv_into(self, data, size):
+        while True:
+            try:
+                return self._object.read(size, data)
+            except SSLWantReadError:
+                if self._outgoing.pending:
+                    await self._socket.send(self._outgoing.read())
+
+                data = await self._socket.recv(size)
+                self._incoming.write(data)
+            except SSLWantWriteError:
+                if self._outgoing.pending:
+                    await self._socket.send(self._outgoing.read())
+
+    async def send(self, data):
+        while True:
+            try:
+                return self._object.write(data)
+            except SSLWantReadError:
+                if self._outgoing.pending:
+                    await self._socket.send(self._outgoing.read())
+
+                data = await self._socket.recv(4096)
+                self._incoming.write(data)
+            except SSLWantWriteError:
+                if self._outgoing.pending:
+                    await self._socket.send(self._outgoing.read())
+
+    async def close(self):
+        while True:
+            try:
+                return self._object.unwrap()
+            except SSLWantReadError:
+                if self._outgoing.pending:
+                    await self._socket.send(self._outgoing.read())
+
+                self._incoming.write(await self._socket.recv(4096))
+            except SSLWantWriteError:
+                if self._outgoing.pending:
+                    await self._socket.send(self._outgoing.read())
 
 
 SOCKET_KIND_UNKNOWN           = '?'

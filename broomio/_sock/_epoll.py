@@ -1,5 +1,4 @@
-from . import _get_socket_exception
-from .._sock import socket
+from . import _get_socket_exception_from_fileno
 from .._sock import SOCKET_KIND_CLIENT_CONNECTION
 from .._sock import SOCKET_KIND_SERVER_CONNECTION
 from .._sock import SOCKET_KIND_SERVER_LISTENING
@@ -32,7 +31,7 @@ class LoopSockEpoll(_LoopSlots):
                 client_socket, client_address = sock.accept()
                 client_socket_info = self._get_sock_info(client_socket.fileno())
                 assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, \
-                    f'Internal data structures are damaged for socket #{socket_info.fileno} ({socket_info.kind}).'
+                    f'Internal data structures are damaged for socket #{client_socket_info.fileno} ({client_socket_info.kind}).'
                 client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
                 handler = handler_factory(socket(sock=client_socket), client_address)
                 child_task_info = self._task_create_new(handler, task_info, stack_frames, nursery)
@@ -210,14 +209,8 @@ class LoopSockEpoll(_LoopSlots):
                 # Socket failed.
                 self._epoll_unregister(socket_info, 0x_0005) # EPOLLIN | EPOLLOUT
 
-                # Get socket.
-                if socket_info.send_task_info:
-                    sock = socket_info.send_task_info.yield_args[0]
-                elif socket_info.recv_task_info:
-                    sock = socket_info.recv_task_info.yield_args[0]
-
                 # Get exception.
-                exception = _get_socket_exception(sock)
+                exception = _get_socket_exception_from_fileno(fileno)
 
                 # Enqueue throwing exception.
                 if socket_info.send_task_info:
@@ -236,7 +229,6 @@ class LoopSockEpoll(_LoopSlots):
                     self._socket_task_count -= 1
 
                 del exception
-                del sock
             else:
                 if (event & 0x_0001) == 0x_0001: # EPOLLIN
                     # Socket is readable.

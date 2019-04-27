@@ -1,4 +1,9 @@
-from ._sock import socket
+from ._sock import TcpClientSocket
+from ._sock import TcpListenSocket
+from ._sock import TlsSocket
+from ._sock import UdpSocket
+from ._sock import UnixClientSocket
+from ._sock import UnixListenSocket
 from ._sock._epoll import LoopSockEpoll
 from ._task import Nursery
 from ._task import NurseryError
@@ -10,7 +15,10 @@ from sys import _getframe
 from time import time
 
 
-__all__ = ['Loop', 'Nursery', 'NurseryError', 'NurseryExceptionPolicy', 'sleep', 'socket']
+__all__ = [
+    'Loop', 'Nursery', 'NurseryError', 'NurseryExceptionPolicy',
+    'sleep',
+    'TcpClientSocket', 'TcpListenSocket', 'TlsSocket', 'UdpSocket', 'UnixClientSocket', 'UnixListenSocket']
 
 
 class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):

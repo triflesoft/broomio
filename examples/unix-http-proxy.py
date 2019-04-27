@@ -3,7 +3,8 @@
 from broomio import Loop
 from broomio import Nursery
 from broomio import sleep
-from broomio import socket
+from broomio import TcpClientSocket
+from broomio import UnixListenSocket
 from datetime import datetime
 from httptools import HttpRequestParser
 from jinja2 import Environment
@@ -38,17 +39,17 @@ class RequestParserCallback:
         self.is_body_complete = True
 
 
-async def connection_handler(client_socket, client_address):
+async def connection_handler(unix_server_socket, client_address):
     callback = RequestParserCallback()
     parser = HttpRequestParser(callback)
     request_data = b''
 
     try:
         while not callback.is_body_complete:
-            chunk = await client_socket.recv(1024)
+            chunk = await unix_server_socket.recv(1024)
 
             if len(chunk) == 0:
-                await client_socket.close()
+                await unix_server_socket.close()
                 return
 
             request_data += chunk
@@ -62,37 +63,37 @@ async def connection_handler(client_socket, client_address):
         else:
             port = 80
 
-        upstream_socket = socket('tcp4')
+        tcp_client_socket = TcpClientSocket()
 
-        await upstream_socket.connect((host, port))
+        await tcp_client_socket.connect((host, port))
 
         try:
             while len(request_data) > 0:
-                length = await upstream_socket.send(request_data)
+                length = await tcp_client_socket.send(request_data)
                 request_data = request_data[length:]
 
             while True:
-                chunk = await upstream_socket.recv(1024)
+                chunk = await tcp_client_socket.recv(1024)
 
                 if len(chunk) == 0:
                     break
 
-                await client_socket.send(chunk)
+                await unix_server_socket.send(chunk)
         finally:
-            await upstream_socket.close()
+            await tcp_client_socket.close()
     finally:
-        await client_socket.close()
+        await unix_server_socket.close()
 
 async def listener():
-    server_socket = socket('unix')
-    server_socket.reuse_addr = True
-    server_socket.reuse_port = True
-    server_socket.bind('/tmp/http-proxy')
-    await server_socket.listen(1024)
+    unix_listen_socket = UnixListenSocket()
+    unix_listen_socket.reuse_addr = True
+    unix_listen_socket.reuse_port = True
+    unix_listen_socket.bind('/tmp/http-proxy')
+    await unix_listen_socket.listen(1024)
 
     async with Nursery() as nursery:
         while True:
-            await server_socket.accept(nursery, connection_handler)
+            await unix_listen_socket.accept(nursery, connection_handler)
 
 
 loop = Loop()

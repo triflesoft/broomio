@@ -3,7 +3,7 @@
 from broomio import Loop
 from broomio import Nursery
 from broomio import sleep
-from broomio import socket
+from broomio import UnixListenSocket
 from datetime import datetime
 from httptools import HttpRequestParser
 from jinja2 import Environment
@@ -50,40 +50,41 @@ class RequestParserCallback:
         self.is_body_complete = True
 
 
-async def connection_handler(client_socket, client_address):
+async def connection_handler(unix_server_socket, client_address):
     callback = RequestParserCallback()
     parser = HttpRequestParser(callback)
 
     while not callback.is_body_complete:
-        chunk = await client_socket.recv(1024)
+        chunk = await unix_server_socket.recv(1024)
 
         if len(chunk) == 0:
-            await client_socket.close()
+            await unix_server_socket.close()
             return
 
         parser.feed_data(chunk)
 
     template = environment.get_template('http-server.html')
-    body_text = template.render({'address': client_socket.peer_cred, 'datetime': datetime.now()})
+    body_text = template.render({'address': unix_server_socket.peer_cred, 'datetime': datetime.now()})
     body_data = body_text.encode('utf-8')
     response = (HEAD_TEMPLATE % len(body_data)) + body_data
 
     while len(response) > 0:
-        length = await client_socket.send(response)
+        length = await unix_server_socket.send(response)
         response = response[length:]
 
-    await client_socket.close()
+    await unix_server_socket.close()
+
 
 async def listener():
-    server_socket = socket('unix')
-    server_socket.reuse_addr = True
-    server_socket.reuse_port = True
-    server_socket.bind('/tmp/http-server')
-    await server_socket.listen(1024)
+    unix_listen_socket = UnixListenSocket()
+    unix_listen_socket.reuse_addr = True
+    unix_listen_socket.reuse_port = True
+    unix_listen_socket.bind('/tmp/http-server')
+    await unix_listen_socket.listen(1024)
 
     async with Nursery() as nursery:
         while True:
-            await server_socket.accept(nursery, connection_handler)
+            await unix_listen_socket.accept(nursery, connection_handler)
 
 
 loop = Loop()

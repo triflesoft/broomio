@@ -2,13 +2,17 @@
 
 from broomio import Loop
 from broomio import Nursery
-from broomio import sleep
 from broomio import TcpListenSocket
+from broomio import TlsSocket
 from datetime import datetime
 from httptools import HttpRequestParser
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from os.path import dirname
+from os.path import join
+from ssl import PROTOCOL_TLS_SERVER
+from ssl import SSLContext
+from ssl import SSLError
 
 
 HEAD_TEMPLATE = b'''HTTP/1.1 200 OK
@@ -58,17 +62,28 @@ class RequestParserCallback:
         self.is_body_complete = True
 
 
+context = SSLContext(PROTOCOL_TLS_SERVER)
+context.load_cert_chain(
+    join(dirname(__file__), 'localhost.crt'),
+    join(dirname(__file__), 'localhost.key'),
+    password='p@$$w0rd')
+
+
 async def connection_handler(tcp_server_socket, client_address):
     callback = RequestParserCallback()
     parser = HttpRequestParser(callback)
     keep_alive = True
 
+    tls_server_socket = TlsSocket(tcp_server_socket, context, 'localhost')
+
     try:
+        await tls_server_socket.handshake()
+
         while keep_alive:
             callback.reset()
 
             while not callback.is_body_complete:
-                chunk = await tcp_server_socket.recv(1024)
+                chunk = await tls_server_socket.recv(1024)
 
                 if len(chunk) == 0:
                     raise BrokenPipeError()
@@ -82,24 +97,26 @@ async def connection_handler(tcp_server_socket, client_address):
             response = (HEAD_TEMPLATE % (len(body_data), b'Keep-Alive' if keep_alive else b'Closed')).replace(b'\n', b'\r\n') + body_data
 
             while len(response) > 0:
-                length = await tcp_server_socket.send(response)
+                length = await tls_server_socket.send(response)
                 response = response[length:]
-    except ConnectionError:
+
+        await tls_server_socket.close()
+    except (ConnectionError, SSLError):
         pass
 
     await tcp_server_socket.close()
 
 
 async def listener():
-    tcp_listen_socket = TcpListenSocket()
-    tcp_listen_socket.reuse_addr = True
-    tcp_listen_socket.reuse_port = True
-    tcp_listen_socket.bind(('0.0.0.0', 7777))
-    await tcp_listen_socket.listen(1024)
+    listen_socket = TcpListenSocket()
+    listen_socket.reuse_addr = True
+    listen_socket.reuse_port = True
+    listen_socket.bind(('0.0.0.0', 7777))
+    await listen_socket.listen(1024)
 
     async with Nursery() as nursery:
         while True:
-            await tcp_listen_socket.accept(nursery, connection_handler)
+            await listen_socket.accept(nursery, connection_handler)
 
 
 loop = Loop()
