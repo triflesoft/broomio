@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from math import fabs
 from time import time
 from tracemalloc import start
 from unittest import main
@@ -29,22 +28,26 @@ class TestSleep(TestCase):
 
             vars['parent_till'] = time()
 
-        vars = {}
-        loop = Loop()
-        loop.start_soon(parent(vars))
-        loop.run()
+        for params in [
+            ('FIFO', ),
+            ('LIFO', )]:
+            with self.subTest(execution_order=params[0]):
+                vars = {}
+                loop = Loop(execution_order=params[0])
+                loop.start_soon(parent(vars))
+                loop.run()
 
-        parent_duration  = fabs(vars['parent_till']  - vars['parent_from'] )
-        child_1_offset   = fabs(vars['child_1_from'] - vars['parent_from'] )
-        child_2_offset   = fabs(vars['child_2_from'] - vars['parent_from'] )
-        child_1_duration = fabs(vars['child_1_till'] - vars['child_1_from'])
-        child_2_duration = fabs(vars['child_2_till'] - vars['child_2_from'])
+                parent_duration  = vars['parent_till']  - vars['parent_from']
+                child_1_offset   = vars['child_1_from'] - vars['parent_from']
+                child_2_offset   = vars['child_2_from'] - vars['parent_from']
+                child_1_duration = vars['child_1_till'] - vars['child_1_from']
+                child_2_duration = vars['child_2_till'] - vars['child_2_from']
 
-        self.assertAlmostEqual(parent_duration,  3.0, 1)
-        self.assertAlmostEqual(child_1_offset,   0.0, 1)
-        self.assertAlmostEqual(child_2_offset,   1.0, 1)
-        self.assertAlmostEqual(child_1_duration, 2.0, 1)
-        self.assertAlmostEqual(child_2_duration, 2.0, 1)
+                self.assertAlmostEqual(parent_duration,  3.0, 1)
+                self.assertAlmostEqual(child_1_offset,   0.0, 1)
+                self.assertAlmostEqual(child_2_offset,   1.0, 1)
+                self.assertAlmostEqual(child_1_duration, 2.0, 1)
+                self.assertAlmostEqual(child_2_duration, 2.0, 1)
 
     def test_sleep_failure(self):
         async def child1(vars, index):
@@ -73,22 +76,26 @@ class TestSleep(TestCase):
             finally:
                 vars['parent_till'] = time()
 
-        vars = {}
-        loop = Loop()
-        loop.start_soon(parent(vars))
-        loop.run()
+        for params in [
+            ('FIFO', ),
+            ('LIFO', )]:
+            with self.subTest(execution_order=params[0]):
+                vars = {}
+                loop = Loop(execution_order=params[0])
+                loop.start_soon(parent(vars))
+                loop.run()
 
-        parent_duration  = fabs(vars['parent_till']  - vars['parent_from'] )
-        child_1_offset   = fabs(vars['child_1_from'] - vars['parent_from'] )
-        child_2_offset   = fabs(vars['child_2_from'] - vars['parent_from'] )
-        child_1_duration = fabs(vars['child_1_till'] - vars['child_1_from'])
-        child_2_duration = fabs(vars['child_2_till'] - vars['child_2_from'])
+                parent_duration  = vars['parent_till']  - vars['parent_from']
+                child_1_offset   = vars['child_1_from'] - vars['parent_from']
+                child_2_offset   = vars['child_2_from'] - vars['parent_from']
+                child_1_duration = vars['child_1_till'] - vars['child_1_from']
+                child_2_duration = vars['child_2_till'] - vars['child_2_from']
 
-        self.assertAlmostEqual(parent_duration,  1.0, 1)
-        self.assertAlmostEqual(child_1_offset,   0.0, 1)
-        self.assertAlmostEqual(child_2_offset,   1.0, 1)
-        self.assertAlmostEqual(child_1_duration, 1.0, 1)
-        self.assertAlmostEqual(child_2_duration, 0.0, 1)
+                self.assertAlmostEqual(parent_duration,  1.0, 1)
+                self.assertAlmostEqual(child_1_offset,   0.0, 1)
+                self.assertAlmostEqual(child_2_offset,   1.0, 1)
+                self.assertAlmostEqual(child_1_duration, 1.0, 1)
+                self.assertAlmostEqual(child_2_duration, 0.0, 1)
 
 
 if __name__ == '__main__':

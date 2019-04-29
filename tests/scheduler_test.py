@@ -16,27 +16,20 @@ class TestScheduler(TestCase):
             await sleep(index / 10.0)
             order.append(index)
 
-        order = []
+        for params in [
+            ('FIFO', ),
+            ('LIFO', )]:
+            with self.subTest(execution_order=params[0]):
+                order = []
 
-        loop = Loop(execution_order='FIFO')
+                loop = Loop(execution_order=params[0])
 
-        for index in range(10):
-            loop.start_soon(child(index))
+                for index in range(10):
+                    loop.start_soon(child(index))
 
-        loop.run()
+                loop.run()
 
-        self.assertEqual(order, [index for index in range(10)])
-
-        order = []
-
-        loop = Loop(execution_order='LIFO')
-
-        for index in range(10):
-            loop.start_soon(child(index))
-
-        loop.run()
-
-        self.assertEqual(order, [index for index in range(10)])
+                self.assertEqual(order, [index for index in range(10)])
 
 if __name__ == '__main__':
     main()
