@@ -6,8 +6,6 @@ from tracemalloc import start
 from unittest import main
 from unittest import TestCase
 from broomio import Loop
-from broomio import Nursery
-from broomio import sleep
 from broomio import execute
 
 
