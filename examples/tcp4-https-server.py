@@ -64,8 +64,8 @@ class RequestParserCallback:
 
 context = SSLContext(PROTOCOL_TLS_SERVER)
 context.load_cert_chain(
-    join(dirname(__file__), 'localhost.crt'),
-    join(dirname(__file__), 'localhost.key'),
+    join(dirname(__file__), 'localhost.rsa2048.crt'),
+    join(dirname(__file__), 'localhost.rsa2048.key'),
     password='p@$$w0rd')
 
 
