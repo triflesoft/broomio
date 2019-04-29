@@ -1,5 +1,7 @@
 from sys import _getframe
 from time import time
+from ._pool import execute
+from ._pool._queue import LoopPoolQueue
 from ._sock import TcpClientSocket
 from ._sock import TcpListenSocket
 from ._sock import TlsSocket
@@ -16,12 +18,14 @@ from ._time._heapq import LoopTimeHeapQ
 
 
 __all__ = [
-    'Loop', 'Nursery', 'NurseryError', 'NurseryExceptionPolicy',
+    'Loop',
+    'Nursery', 'NurseryError', 'NurseryExceptionPolicy',
     'sleep',
-    'TcpClientSocket', 'TcpListenSocket', 'TlsSocket', 'UdpSocket', 'UnixClientSocket', 'UnixListenSocket']
+    'TcpClientSocket', 'TcpListenSocket', 'TlsSocket', 'UdpSocket', 'UnixClientSocket', 'UnixListenSocket',
+    'execute']
 
 
-class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
+class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ, LoopPoolQueue):
     def start_soon(self, coro):
         # Create task info for root task. Root tasks have no parent. Root tasks can be created after loop was started \
         # from another thread, but that does not look like great idea.
@@ -57,9 +61,13 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ):
             # Are there sockets to check for readiness?
             elif self._socket_wait_count > 0:
                 self._process_sock()
+            elif self._pool_task_count > 0:
+                self._process_pool()
             else:
                 # Nothing to do, stop loop.
                 running = False
+
+        self._pool_term_all()
 
         if self._task_nursery._exceptions:
             raise NurseryError(self._task_nursery._exceptions) from self._task_nursery._exceptions[0][1]

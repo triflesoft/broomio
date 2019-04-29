@@ -27,7 +27,8 @@ class _LoopSlots:
         '_task_enqueue_one', \
         '_task_enqueue_many', \
         '_time_heapq', '_now', \
-        '_sock_array', '_get_sock_info', '_socket_wait_count', '_socket_task_count', '_socket_epoll'
+        '_sock_array', '_get_sock_info', '_socket_wait_count', '_socket_task_count', '_socket_epoll', \
+        '_pool_queue_map', '_pool_task_count'
 
     def _task_enqueue_many_fifo(self, *task_infos):
         for task_info in task_infos:
@@ -159,3 +160,6 @@ class _LoopSlots:
 
         if not self._socket_epoll:
             self._socket_epoll = _SelectFakeEPoll()
+
+        self._pool_queue_map = {}
+        self._pool_task_count = 0

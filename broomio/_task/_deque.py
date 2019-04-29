@@ -12,6 +12,7 @@ from .._syscalls import SYSCALL_NURSERY_JOIN
 from .._syscalls import SYSCALL_NURSERY_KILL
 from .._syscalls import SYSCALL_NURSERY_START_LATER
 from .._syscalls import SYSCALL_NURSERY_START_SOON
+from .._syscalls import SYSCALL_POOL_EXECUTE
 from .._syscalls import SYSCALL_SOCKET_ACCEPT
 from .._syscalls import SYSCALL_SOCKET_CLOSE
 from .._syscalls import SYSCALL_SOCKET_CONNECT
@@ -504,6 +505,10 @@ class LoopTaskDeque(_LoopSlots):
                     del fileno
                     del backlog
                     del sock
+                elif task_info.yield_func == SYSCALL_POOL_EXECUTE:
+                    name, args, kwargs = task_info.yield_args
+
+                    self._pool_enqueue(name, task_info, args, kwargs) # pylint: disable=E1101
                 else:
                     assert False, f'Unexpected syscall {task_info.yield_func}.'
 

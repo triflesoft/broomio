@@ -372,7 +372,7 @@ SOCKET_KIND_SERVER_CONNECTION = 'S'
 SOCKET_KIND_CLIENT_CONNECTION = 'C'
 
 
-class _SocketInfo(object):
+class _SocketInfo:
     __slots__ = \
         'fileno', \
         'kind', \

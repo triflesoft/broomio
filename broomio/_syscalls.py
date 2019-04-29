@@ -15,3 +15,4 @@ SYSCALL_SOCKET_RECVFROM_INTO = 0x_58 # Receive data. pylint: disable=C0326
 SYSCALL_SOCKET_SEND          = 0x_59 # Send data. pylint: disable=C0326
 SYSCALL_SOCKET_SENDTO        = 0x_5A # Send data. pylint: disable=C0326
 SYSCALL_SOCKET_SHUTDOWN      = 0x_5B # Shutdown socket. pylint: disable=C0326
+SYSCALL_POOL_EXECUTE         = 0x_91 # Execute task in pool. pylint: disable=C0326
