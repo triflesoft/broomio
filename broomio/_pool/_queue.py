@@ -70,6 +70,7 @@ def _process_pool_process_worker(request_queue, response_queue, task_handler):
         if request is None:
             break
 
+        # TODO: Process exceptions.
         result = task_handler(*request.args, **request.kwargs)
 
         response_queue.put(ProcessPoolResponce(request.task_info_id, result))
@@ -133,6 +134,6 @@ class LoopPoolQueue(_LoopSlots):
         self._pool_task_count += 1
 
     def _process_pool(self):
-        while not self._task_deque:
+        if not self._task_deque:
             # FIXME: Maybe anything better?
-            sleep(0.01)
+            sleep(0.001)
