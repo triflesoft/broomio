@@ -35,8 +35,9 @@ class LoopSockEpoll(_LoopSlots):
                 assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, \
                     f'Internal data structures are damaged for socket #{client_socket_info.fileno} ({client_socket_info.kind}).'
 
+                client_socket.setblocking(False)
                 client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
-                handler = handler_factory(socket_factory(socket_handle=client_socket), client_address)
+                handler = handler_factory(socket_factory(socket_obj=client_socket), client_address)
                 child_task_info = self._task_create_new(handler, task_info, stack_frames, nursery) # pylint: disable=E1101
                 self._task_enqueue_one(child_task_info)
         except OSError:

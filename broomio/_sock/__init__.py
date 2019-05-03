@@ -77,13 +77,14 @@ class SocketBase:
     reuse_port = property(__get_socket_opt_reuse_port, __set_socket_opt_reuse_port)
     peer_cred = property(__get_socket_opt_peer_cred)
 
-    def __init__(self, socket_family=None, socket_type=None, socket_protocol=None, socket_handle=None):
-        if socket_handle is None:
-            self._socket = socket(socket_family, socket_type, socket_protocol)
+    def __init__(self, socket_family=None, socket_type=None, socket_protocol=None, fileno=None, socket_obj=None):
+        if socket_obj:
+            self._socket = socket_obj
+        elif fileno:
+            self._socket = socket(fileno=fileno)
         else:
-            self._socket = socket_handle
-
-        self._socket.setblocking(False)
+            self._socket = socket(socket_family, socket_type, socket_protocol)
+            self._socket.setblocking(False)
 
     def getpeername(self):
         return self._socket.getpeername()
@@ -181,8 +182,8 @@ class TcpServerSocket(SocketBase):
     CAN_BE_CLIENT = False
     CAN_BE_SERVER = True
 
-    def __init__(self, socket_handle):
-        super().__init__(socket_handle=socket_handle)
+    def __init__(self, socket_obj):
+        super().__init__(socket_obj=socket_obj)
 
     @coroutine
     def recv(self, size):
@@ -244,8 +245,8 @@ class UnixServerSocket(SocketBase):
     CAN_BE_CLIENT = False
     CAN_BE_SERVER = True
 
-    def __init__(self, socket_handle):
-        super().__init__(socket_handle=socket_handle)
+    def __init__(self, socket_obj):
+        super().__init__(socket_obj=socket_obj)
 
     @coroutine
     def recv(self, size):
