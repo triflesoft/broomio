@@ -53,6 +53,8 @@ class ThreadPool:
 
 
 class ProcessPoolRequest:
+    __slots__ = 'task_info_id', 'args', 'kwargs'
+
     def __init__(self, task_info_id, args, kwargs):
         self.task_info_id = task_info_id
         self.args = args
@@ -60,9 +62,12 @@ class ProcessPoolRequest:
 
 
 class ProcessPoolResponce:
-    def __init__(self, task_info_id, result):
+    __slots__ = 'task_info_id', 'send_args', 'throw_exc'
+
+    def __init__(self, task_info_id, send_args, throw_exc):
         self.task_info_id = task_info_id
-        self.result = result
+        self.send_args = send_args
+        self.throw_exc = throw_exc
 
 
 def _process_pool_process_worker(request_queue, response_queue, task_handler_factory):
@@ -74,10 +79,11 @@ def _process_pool_process_worker(request_queue, response_queue, task_handler_fac
         if request is None:
             break
 
-        # TODO: Process exceptions.
-        result = task_handler(*request.args, **request.kwargs)
-
-        response_queue.put(ProcessPoolResponce(request.task_info_id, result))
+        try:
+            send_args = task_handler(*request.args, **request.kwargs)
+            response_queue.put(ProcessPoolResponce(request.task_info_id, send_args, None))
+        except BaseException as throw_exc:
+            response_queue.put(ProcessPoolResponce(request.task_info_id, None, throw_exc))
 
 
 class ProcessPool:
@@ -91,7 +97,8 @@ class ProcessPool:
                 break
 
             task_info = self.task_info_map[response.task_info_id]
-            task_info.send_args = response.result
+            task_info.send_args = response.send_args
+            task_info.throw_exc = response.throw_exc
             self.loop._task_enqueue_one(task_info)
             self.loop._pool_task_count -= 1
 

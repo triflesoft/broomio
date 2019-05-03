@@ -28,7 +28,6 @@ class TestPool(TestCase):
             ('LIFO', 1.0, 0.5)]:
             with self.subTest(execution_order=params[0]):
                 vars = {}
-                loop_from = time()
                 loop = Loop(execution_order=params[0])
                 loop.pool_init_thread('test', 2, lambda: handler)
                 loop.start_soon(child(vars, 1, 1, 2, 3, 4))
@@ -36,19 +35,16 @@ class TestPool(TestCase):
                 loop.start_soon(child(vars, 3, 3, 4, 5, 6))
                 loop.start_soon(child(vars, 4, 4, 5, 6, 7))
                 loop.run()
-                loop_till = time()
 
                 child_1_duration = vars['child_1_till'] - vars['child_1_from']
                 child_2_duration = vars['child_2_till'] - vars['child_2_from']
                 child_3_duration = vars['child_3_till'] - vars['child_3_from']
                 child_4_duration = vars['child_4_till'] - vars['child_4_from']
-                loop_duration = loop_till - loop_from
 
                 self.assertAlmostEqual(child_1_duration, params[1], 1)
                 self.assertAlmostEqual(child_2_duration, params[1], 1)
                 self.assertAlmostEqual(child_3_duration, params[2], 1)
                 self.assertAlmostEqual(child_4_duration, params[2], 1)
-                self.assertAlmostEqual(loop_duration, 1.0, 0)
 
     def test_process_pool(self):
         def handler(*args, **kwargs):
@@ -66,7 +62,6 @@ class TestPool(TestCase):
             ('LIFO', 1.0, 0.5)]:
             with self.subTest(execution_order=params[0]):
                 vars = {}
-                loop_from = time()
                 loop = Loop(execution_order=params[0])
                 loop.pool_init_process('test', 2, lambda: handler)
                 loop.start_soon(child(vars, 1, 1, 2, 3, 4))
@@ -74,19 +69,41 @@ class TestPool(TestCase):
                 loop.start_soon(child(vars, 3, 3, 4, 5, 6))
                 loop.start_soon(child(vars, 4, 4, 5, 6, 7))
                 loop.run()
-                loop_till = time()
 
                 child_1_duration = vars['child_1_till'] - vars['child_1_from']
                 child_2_duration = vars['child_2_till'] - vars['child_2_from']
                 child_3_duration = vars['child_3_till'] - vars['child_3_from']
                 child_4_duration = vars['child_4_till'] - vars['child_4_from']
-                loop_duration = loop_till - loop_from
 
                 self.assertAlmostEqual(child_1_duration, params[1], 1)
                 self.assertAlmostEqual(child_2_duration, params[1], 1)
                 self.assertAlmostEqual(child_3_duration, params[2], 1)
                 self.assertAlmostEqual(child_4_duration, params[2], 1)
-                self.assertAlmostEqual(loop_duration, 1.0, 0)
+
+    def test_exception(self):
+        def handler():
+            raise Exception('TEST')
+
+        async def child(vars):
+            try:
+                await execute('test', a, b, c=c, d=d)
+            except:
+                vars['exceptions'] += 1
+
+        for params in [
+            ('FIFO', 0.5, 1.0),
+            ('LIFO', 1.0, 0.5)]:
+            with self.subTest(execution_order=params[0]):
+                vars = {'exceptions': 0}
+                loop = Loop(execution_order=params[0])
+                loop.pool_init_thread('test', 2, handler)
+                loop.start_soon(child(vars))
+                loop.start_soon(child(vars))
+                loop.start_soon(child(vars))
+                loop.start_soon(child(vars))
+                loop.run()
+
+                self.assertEqual(vars['exceptions'], 4)
 
 
 if __name__ == '__main__':
