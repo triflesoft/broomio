@@ -17,9 +17,11 @@ class ThreadPoolTask:
 
 
 class ThreadPool:
-    __slots__ = 'loop', 'task_handler', 'threads', 'request_queue'
+    __slots__ = 'loop', 'task_handler_factory', 'threads', 'request_queue'
 
     def _thread_worker(self):
+        task_handler = self.task_handler_factory()
+
         while True:
             task = self.request_queue.get()
 
@@ -27,13 +29,13 @@ class ThreadPool:
                 break
 
             task_info = task.task_info
-            task_info.send_args = self.task_handler(*task.args, **task.kwargs)
+            task_info.send_args = task_handler(*task.args, **task.kwargs)
             self.loop._task_enqueue_one(task_info)
             self.loop._pool_task_count -= 1
 
-    def __init__(self, loop, task_handler, thread_number):
+    def __init__(self, loop, task_handler_factory, thread_number):
         self.loop = loop
-        self.task_handler = task_handler
+        self.task_handler_factory = task_handler_factory
         self.threads = []
         self.request_queue = SimpleQueue()
 
@@ -63,7 +65,9 @@ class ProcessPoolResponce:
         self.result = result
 
 
-def _process_pool_process_worker(request_queue, response_queue, task_handler):
+def _process_pool_process_worker(request_queue, response_queue, task_handler_factory):
+    task_handler = task_handler_factory()
+
     while True:
         request = request_queue.get()
 
@@ -77,7 +81,7 @@ def _process_pool_process_worker(request_queue, response_queue, task_handler):
 
 
 class ProcessPool:
-    __slots__ = 'loop', 'task_handler', 'thread', 'processes', 'request_queue', 'response_queue', 'task_info_map'
+    __slots__ = 'loop', 'task_handler_factory', 'thread', 'processes', 'request_queue', 'response_queue', 'task_info_map'
 
     def _thread_worker(self):
         while True:
@@ -91,9 +95,9 @@ class ProcessPool:
             self.loop._task_enqueue_one(task_info)
             self.loop._pool_task_count -= 1
 
-    def __init__(self, loop, task_handler, thread_number):
+    def __init__(self, loop, task_handler_factory, thread_number):
         self.loop = loop
-        self.task_handler = task_handler
+        self.task_handler_factory = task_handler_factory
         self.thread = Thread(target=self._thread_worker)
         self.processes = []
         self.request_queue = Queue()
@@ -101,7 +105,7 @@ class ProcessPool:
         self.task_info_map = {}
 
         for _ in range(thread_number):
-            process = Process(target=_process_pool_process_worker, args=(self.request_queue, self.response_queue, self.task_handler))
+            process = Process(target=_process_pool_process_worker, args=(self.request_queue, self.response_queue, self.task_handler_factory))
             process.start()
             self.processes.append(process)
 
@@ -119,11 +123,11 @@ class ProcessPool:
 
 
 class LoopPoolQueue(_LoopSlots):
-    def pool_init_thread(self, name, thread_number, task_handler):
-        self._pool_queue_map[name] = ThreadPool(self, task_handler, thread_number)
+    def pool_init_thread(self, name, thread_number, task_handler_factory):
+        self._pool_queue_map[name] = ThreadPool(self, task_handler_factory, thread_number)
 
-    def pool_init_process(self, name, process_number, task_handler):
-        self._pool_queue_map[name] = ProcessPool(self, task_handler, process_number)
+    def pool_init_process(self, name, process_number, task_handler_factory):
+        self._pool_queue_map[name] = ProcessPool(self, task_handler_factory, process_number)
 
     def _pool_term_all(self):
         for pool_queue in self._pool_queue_map.values():

@@ -30,7 +30,7 @@ class TestPool(TestCase):
                 vars = {}
                 loop_from = time()
                 loop = Loop(execution_order=params[0])
-                loop.pool_init_thread('test', 2, handler)
+                loop.pool_init_thread('test', 2, lambda: handler)
                 loop.start_soon(child(vars, 1, 1, 2, 3, 4))
                 loop.start_soon(child(vars, 2, 2, 3, 4, 5))
                 loop.start_soon(child(vars, 3, 3, 4, 5, 6))
@@ -68,7 +68,7 @@ class TestPool(TestCase):
                 vars = {}
                 loop_from = time()
                 loop = Loop(execution_order=params[0])
-                loop.pool_init_process('test', 2, handler)
+                loop.pool_init_process('test', 2, lambda: handler)
                 loop.start_soon(child(vars, 1, 1, 2, 3, 4))
                 loop.start_soon(child(vars, 2, 2, 3, 4, 5))
                 loop.start_soon(child(vars, 3, 3, 4, 5, 6))
