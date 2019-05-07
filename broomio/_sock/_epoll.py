@@ -33,7 +33,7 @@ class LoopSockEpoll(_LoopSlots):
 
                 # pylint: disable=C0301
                 assert client_socket_info.kind == SOCKET_KIND_UNKNOWN, \
-                    f'Internal data structures are damaged for socket #{client_socket_info.fileno} ({client_socket_info.kind}).'
+                    f'Internal data structures are damaged for socket #{client_socket_info.fileno} ({client_socket_info.kind}). Most probably previous connection with the same file number was not properly closed.'
 
                 client_socket.setblocking(False)
                 client_socket_info.kind = SOCKET_KIND_SERVER_CONNECTION
