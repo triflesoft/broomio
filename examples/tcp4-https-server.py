@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 from datetime import datetime
+from datetime import timezone
+from email.utils import format_datetime
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from os.path import dirname
@@ -16,9 +18,8 @@ from broomio import TlsSocket
 
 
 HEAD_TEMPLATE = b'''HTTP/1.1 200 OK
-Date: Mon, 13 Jan 2019 12:28:53 GMT
-Server: Apache/2.2.14 (Win32)
-Last-Modified: Wed, 22 Jul 2009 19:15:56 GMT
+Date: %s
+Server: broomio/1.2.3
 Content-Length: %d
 Content-Type: text/html
 Connection: %s
@@ -94,7 +95,10 @@ async def connection_handler(tcp_server_socket, client_address):
             template = environment.get_template('http-server.html')
             body_text = template.render({'address': client_address, 'datetime': datetime.now()})
             body_data = body_text.encode('utf-8')
-            response = (HEAD_TEMPLATE % (len(body_data), b'Keep-Alive' if keep_alive else b'Closed')).replace(b'\n', b'\r\n') + body_data
+            response = (HEAD_TEMPLATE % (
+                format_datetime(datetime.now(timezone.utc), True).encode('ascii'),
+                len(body_data),
+                b'Keep-Alive' if keep_alive else b'Closed')) + body_data
 
             while len(response) > 0:
                 length = await tls_server_socket.send(response)

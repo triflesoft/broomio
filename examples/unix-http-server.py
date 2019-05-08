@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 from datetime import datetime
+from datetime import timezone
+from email.utils import format_datetime
 from jinja2 import Environment
 from jinja2 import FileSystemLoader
 from os.path import dirname
@@ -11,12 +13,11 @@ from broomio import UnixListenSocket
 
 
 HEAD_TEMPLATE = b'''HTTP/1.1 200 OK
-Date: Mon, 13 Jan 2019 12:28:53 GMT
-Server: Apache/2.2.14 (Win32)
-Last-Modified: Wed, 22 Jul 2009 19:15:56 GMT
+Date: %s
+Server: broomio/1.2.3
 Content-Length: %d
 Content-Type: text/html
-Connection: Closed
+Connection: %s
 
 '''
 
@@ -24,6 +25,13 @@ environment = Environment(auto_reload=False, enable_async=False, loader=FileSyst
 
 class RequestParserCallback:
     def __init__(self):
+        self.url = b''
+        self.headers = {}
+        self.are_headers_complete = False
+        self.body = b''
+        self.is_body_complete = False
+
+    def reset(self):
         self.url = b''
         self.headers = {}
         self.are_headers_complete = False
@@ -52,24 +60,35 @@ class RequestParserCallback:
 async def connection_handler(unix_server_socket, client_address):
     callback = RequestParserCallback()
     parser = HttpRequestParser(callback)
+    keep_alive = True
 
-    while not callback.is_body_complete:
-        chunk = await unix_server_socket.recv(1024)
+    try:
+        while keep_alive:
+            callback.reset()
 
-        if len(chunk) == 0:
-            await unix_server_socket.close()
-            return
+            while not callback.is_body_complete:
+                chunk = await unix_server_socket.recv(1024)
 
-        parser.feed_data(chunk)
+                if len(chunk) == 0:
+                    await unix_server_socket.close()
+                    return
 
-    template = environment.get_template('http-server.html')
-    body_text = template.render({'address': unix_server_socket.peer_cred, 'datetime': datetime.now()})
-    body_data = body_text.encode('utf-8')
-    response = (HEAD_TEMPLATE % len(body_data)) + body_data
+                parser.feed_data(chunk)
 
-    while len(response) > 0:
-        length = await unix_server_socket.send(response)
-        response = response[length:]
+            keep_alive = parser.should_keep_alive()
+            template = environment.get_template('http-server.html')
+            body_text = template.render({'address': unix_server_socket.peer_cred, 'datetime': datetime.now()})
+            body_data = body_text.encode('utf-8')
+            response = (HEAD_TEMPLATE % (
+                format_datetime(datetime.now(timezone.utc), True).encode('ascii'),
+                len(body_data),
+                b'Keep-Alive' if keep_alive else b'Closed')) + body_data
+
+            while len(response) > 0:
+                length = await unix_server_socket.send(response)
+                response = response[length:]
+    except ConnectionError:
+        pass
 
     await unix_server_socket.close()
 
