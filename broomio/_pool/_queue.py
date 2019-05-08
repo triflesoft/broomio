@@ -1,6 +1,15 @@
 from multiprocessing import Process
-from multiprocessing import Queue
-from queue import SimpleQueue
+
+try:
+    from multiprocessing import SimpleQueue as ProcessQueue
+except ImportError:
+    from multiprocessing import Queue as ProcessQueue
+
+try:
+    from queue import SimpleQueue as ThreadQueue
+except ImportError:
+    from queue import Queue as ThreadQueue
+
 from threading import Thread
 from time import sleep
 from .._util import _LoopSlots
@@ -37,7 +46,7 @@ class ThreadPool:
         self.loop = loop
         self.task_handler_factory = task_handler_factory
         self.threads = []
-        self.request_queue = SimpleQueue()
+        self.request_queue = ThreadQueue()
 
         for _ in range(thread_number):
             thread = Thread(target=self._thread_worker)
@@ -107,8 +116,8 @@ class ProcessPool:
         self.task_handler_factory = task_handler_factory
         self.thread = Thread(target=self._thread_worker)
         self.processes = []
-        self.request_queue = Queue()
-        self.response_queue = Queue()
+        self.request_queue = ProcessQueue()
+        self.response_queue = ProcessQueue()
         self.task_info_map = {}
 
         for _ in range(thread_number):
