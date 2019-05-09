@@ -45,29 +45,30 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ, LoopPoolQueue):
         # True if there are any tasks scheduled.
         running = True
 
-        while running:
-            # Each loop iteration is a tick. Current time as reference for timers.
-            self._now = time()
+        try:
+            while running:
+                # Each loop iteration is a tick. Current time as reference for timers.
+                self._now = time()
 
-            # SPEED: Testing if collection is empty before calling method is much faster. \
-            # SPEED: If collection is empty, method is not called.
+                # SPEED: Testing if collection is empty before calling method is much faster. \
+                # SPEED: If collection is empty, method is not called.
 
-            # Are there tasks ready for execution?
-            if self._task_deque:
-                self._process_task()
-            # Are there task which are scheduled to run later?
-            elif self._time_heapq:
-                self._process_time()
-            # Are there sockets to check for readiness?
-            elif self._socket_wait_count > 0:
-                self._process_sock()
-            elif self._pool_task_count > 0:
-                self._process_pool()
-            else:
-                # Nothing to do, stop loop.
-                running = False
-
-        self._pool_term_all()
-
-        if self._task_nursery._exceptions:
-            raise NurseryError(self._task_nursery._exceptions) from self._task_nursery._exceptions[0][1]
+                # Are there tasks ready for execution?
+                if self._task_deque:
+                    self._process_task()
+                # Are there any unhandler exceptions?
+                elif self._task_nursery._exception_infos:
+                    raise NurseryError(self._task_nursery._exception_infos) from self._task_nursery._exception_infos[0].exception
+                # Are there task which are scheduled to run later?
+                elif self._time_heapq:
+                    self._process_time()
+                # Are there sockets to check for readiness?
+                elif self._socket_wait_count > 0:
+                    self._process_sock()
+                elif self._pool_task_count > 0:
+                    self._process_pool()
+                else:
+                    # Nothing to do, stop loop.
+                    running = False
+        finally:
+            self._pool_term_all()

@@ -1,4 +1,6 @@
 from enum import Enum
+from traceback import format_exception
+from traceback import print_exc
 from types import coroutine
 from .._syscalls import SYSCALL_NURSERY_INIT
 from .._syscalls import SYSCALL_NURSERY_JOIN
@@ -13,17 +15,33 @@ class NurseryExceptionPolicy(Enum):
     Ignore = 3
 
 
+class NurseryExceptionInfo:
+    __slots__ = 'task_info', 'exception'
+
+    def __init__(self, task_info, exception):
+        self.task_info = task_info
+        self.exception = exception
+
+
 class NurseryError(Exception):
-    def __init__(self, exceptions):
+    def __init__(self, exception_infos):
         super().__init__()
-        self.exceptions = exceptions
+        self._exception_infos = exception_infos
 
     def __repr__(self):
         return str(self)
 
     def __str__(self):
-        return ''.join(
-            f'\n\t{repr(exception[1])} @ {repr(exception[0].coro.cr_code)}' for exception in self.exceptions)
+        parts = []
+
+        for exception_info in self._exception_infos:
+            #if type(exception_info.exception) is NurseryError:
+            #    parts.append(f'\n\tNurseryError @ {repr(exception_info.task_info.coro.cr_code)}')
+            #else:
+            #    #parts.append(f'\n\t{repr(exception_info.exception)} @ {repr(exception_info.task_info.coro.cr_code)}')
+            parts.append(format_exception(type(exception_info.exception), exception_info.exception, exception_info.exception.__traceback__))
+
+        return ''.join(*parts)
 
 
 class CoroutineTracebackException(BaseException):
@@ -32,17 +50,19 @@ class CoroutineTracebackException(BaseException):
 
 class Nursery:
     __slots__ = \
-        '_children', '_watchers', \
-        '_exception_policy', '_exceptions', \
-        '_timeout', '_task_info'
+        '_children', '_is_joined', \
+        '_exception_policy', '_exception_infos', \
+        '_timeout', '_task_info', \
+        '_parent_nursery'
 
     def __init__(self, exception_policy=NurseryExceptionPolicy.Abort, timeout=-1):
         self._children = set()
-        self._watchers = set()
+        self._is_joined = exception_policy == NurseryExceptionPolicy.Abort
         self._exception_policy = exception_policy
-        self._exceptions = []
+        self._exception_infos = []
         self._timeout = timeout
         self._task_info = None
+        self._parent_nursery = None
 
     @coroutine
     def __aenter__(self):
@@ -65,6 +85,10 @@ class Nursery:
     @coroutine
     def start_later(self, coro, delay):
         return (yield SYSCALL_NURSERY_START_LATER, self, coro, delay)
+
+
+class _TaskAbortError(BaseException):
+    pass
 
 
 class _TaskInfo:

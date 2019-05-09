@@ -1,5 +1,6 @@
 from heapq import heappop
 from time import sleep as time_sleep
+from .._task import _TaskAbortError
 from .._task import _TaskInfo
 from .._task import Nursery
 from .._util import _LoopSlots
@@ -26,7 +27,7 @@ class LoopTimeHeapQ(_LoopSlots):
                 self._task_enqueue_one(element)
             elif operation == 0x_02:
                 if isinstance(element, _TaskInfo):
-                    self._task_abort(element) # pylint: disable=E1101
+                    self._task_abort(element, _TaskAbortError()) # pylint: disable=E1101
                 elif isinstance(element, Nursery):
                     self._nursery_abort_children(element) # pylint: disable=E1101
                 else:

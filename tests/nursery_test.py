@@ -30,7 +30,7 @@ class TestNursery(TestCase):
                     await nursery.start_soon(child(1, 0))
                     await nursery.start_soon(child(1, 2))
             except NurseryError as ne:
-                vars['exception_number'] = len(ne.exceptions)
+                vars['exception_number'] = len(ne._exception_infos)
 
         async def parent_split(vars, exception_policy):
             try:
@@ -44,7 +44,7 @@ class TestNursery(TestCase):
                     await nursery.start_soon(child(1, 0))
                     await nursery.start_soon(child(1, 2))
             except NurseryError as ne:
-                vars['exception_number'] = len(ne.exceptions)
+                vars['exception_number'] = len(ne._exception_infos)
 
         for params in [
             ('FIFO', NurseryExceptionPolicy.Abort, 1),

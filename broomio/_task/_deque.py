@@ -1,9 +1,11 @@
 from heapq import heapify
 from heapq import heappush
 from types import TracebackType
+from . import _TaskAbortError
 from . import _TaskInfo
 from . import CoroutineTracebackException
 from . import NurseryError
+from . import NurseryExceptionInfo
 from . import NurseryExceptionPolicy
 from .._sock import SOCKET_KIND_SERVER_LISTENING
 from .._sock import SOCKET_KIND_UNKNOWN
@@ -43,10 +45,6 @@ SYSCALL_SOCKET_WRITE = set([
     SYSCALL_SOCKET_SHUTDOWN])
 
 
-class TaskAbortError(BaseException):
-    pass
-
-
 class LoopTaskDeque(_LoopSlots):
     def _nursery_abort_children(self, nursery):
         # Child task is already queued either in _task_deque, _time_heapq or _sock_array. If child task is already is \
@@ -58,21 +56,25 @@ class LoopTaskDeque(_LoopSlots):
             if child_task_info.child_nursery:
                 self._nursery_abort_children(child_task_info.child_nursery)
 
-            has_time_changes = has_time_changes or (self._task_abort(child_task_info) == 'time')
+            has_time_changes = has_time_changes or (self._task_abort(child_task_info, _TaskAbortError()) == 'time')
 
         # HeapQ must be rebuilt.
         if has_time_changes:
             heapify(self._time_heapq)
 
     def _nursery_process_exception(self, nursery, task_info, exception):
+        if type(exception) is NurseryError:
+            if exception._exception_infos == nursery._exception_infos:
+                return
+
         if nursery._exception_policy == NurseryExceptionPolicy.Abort:
             # Save exception
-            nursery._exceptions.append((task_info, exception))
+            nursery._exception_infos.append(NurseryExceptionInfo(task_info, exception))
             # Cancel all child tasks.
             self._nursery_abort_children(nursery)
         elif nursery._exception_policy == NurseryExceptionPolicy.Accumulate:
             # Save exception
-            nursery._exceptions.append((task_info, exception))
+            nursery._exception_infos.append(NurseryExceptionInfo(task_info, exception))
         elif nursery._exception_policy == NurseryExceptionPolicy.Ignore:
             pass
         else:
@@ -80,29 +82,22 @@ class LoopTaskDeque(_LoopSlots):
 
     def _nursery_notify_watchers(self, nursery):
         # Was that task the last nursery child?
-        if not nursery._children:
-            # Notify all watchers.
-            for watcher_task_info in nursery._watchers:
-                if nursery._exceptions:
-                    watcher_task_info.throw_exc = NurseryError(nursery._exceptions)
-                    watcher_task_info.throw_exc.__cause__ = nursery._exceptions[0][1]
+        if not nursery._children and nursery._is_joined:
+            if nursery._task_info:
+                if nursery._exception_infos:
+                    nursery_error = NurseryError(nursery._exception_infos)
+                    nursery_error.__cause__ = nursery._exception_infos[0].exception
 
-                possible_owner_task_info = watcher_task_info
+                    if not self._task_abort(nursery._task_info, nursery_error):
+                        nursery._task_info.child_nursery = None
+                        self._task_enqueue_one(nursery._task_info)
+                else:
+                    nursery._task_info.child_nursery = None
+                    self._task_enqueue_one(nursery._task_info)
 
-                # FIXME: Validate algorithm. \
-                # Looks like passing Nursery between siblings is not supported at all.
-                while possible_owner_task_info:
-                    if possible_owner_task_info.child_nursery == nursery:
-                        possible_owner_task_info.child_nursery = None
-                        break
-
-                    possible_owner_task_info = possible_owner_task_info.parent_task_info
-
-                self._task_enqueue_one(watcher_task_info)
-
-    def _task_abort(self, task_info):
+    def _task_abort(self, task_info, exception):
         # Throw exception in task.
-        task_info.throw_exc = TaskAbortError()
+        task_info.throw_exc = exception
 
         if task_info.recv_fileno:
             # This task is waiting for socket to become readable.
@@ -197,6 +192,10 @@ class LoopTaskDeque(_LoopSlots):
                     # coro.throw, then fake parent coroutine state is corrupted.
                     task_info.throw_exc.__cause__ = CoroutineTracebackException().with_traceback(prev_traceback)
 
+                    del prev_traceback
+                    del frame_task_info
+                    del frame_task_infos
+
                     try:
                         # Throw exception. \
                         # Fake traceback is provided as __cause__. \
@@ -229,7 +228,7 @@ class LoopTaskDeque(_LoopSlots):
                 self._nursery_notify_watchers(parent_nursery)
 
                 del parent_nursery
-            except TaskAbortError:
+            except _TaskAbortError:
                 # This code is copy-paste of "StopIteration" handling, but it will not be so in future. \
                 # Task completed because we requested it to complete. Remove task from parent_nursery.
                 parent_nursery = task_info.parent_nursery
@@ -268,6 +267,7 @@ class LoopTaskDeque(_LoopSlots):
                     # Wait for all nursery tasks to be finished.
                     nursery = task_info.yield_args[0]
                     nursery._task_info = task_info
+                    nursery._parent_nursery = task_info.parent_nursery
                     task_info.child_nursery = nursery
                     task_info.send_args = nursery
                     self._task_enqueue_one(task_info)
@@ -281,9 +281,13 @@ class LoopTaskDeque(_LoopSlots):
                     # Wait for all nursery tasks to be finished.
                     nursery = task_info.yield_args[0]
 
-                    if nursery._children:
-                        nursery._watchers.add(task_info)
-                    else:
+                    assert task_info == nursery._task_info, \
+                        f'Internal data structures are damaged for task {task_info.coro.cr_code.co_name}.'
+
+                    nursery._is_joined = True
+
+                    if not nursery._children:
+                        task_info.child_nursery = None
                         self._task_enqueue_one(task_info)
 
                     del nursery
@@ -294,10 +298,6 @@ class LoopTaskDeque(_LoopSlots):
                     self._nursery_process_exception(nursery, task_info, exception)
                     # Notify watchers
                     self._nursery_notify_watchers(nursery)
-
-                    # Enqueue task to be executed in current tick.
-                    task_info.throw_exc = exception
-                    self._task_enqueue_one(task_info)
 
                     del nursery
                     del exception_type
@@ -311,8 +311,8 @@ class LoopTaskDeque(_LoopSlots):
                     # Create child task.
                     child_task_info = self._task_create_new(coro, task_info, stack_frames, nursery)
                     # Cancel child task right away if required.
-                    if (nursery._exception_policy == NurseryExceptionPolicy.Abort) and nursery._exceptions:
-                        child_task_info.throw_exc = TaskAbortError()
+                    if (nursery._exception_policy == NurseryExceptionPolicy.Abort) and nursery._exception_infos:
+                        child_task_info.throw_exc = _TaskAbortError()
                     # Enqueue current (parent) and child tasks.
                     self._task_enqueue_many(*(task_info, child_task_info))
 
@@ -327,8 +327,8 @@ class LoopTaskDeque(_LoopSlots):
                     # Create child task.
                     child_task_info = self._task_create_new(coro, task_info, stack_frames, nursery)
                     # Cancel child task right away if required.
-                    if (nursery._exception_policy == NurseryExceptionPolicy.Abort) and nursery._exceptions:
-                        child_task_info.throw_exc = TaskAbortError()
+                    if (nursery._exception_policy == NurseryExceptionPolicy.Abort) and nursery._exception_infos:
+                        child_task_info.throw_exc = _TaskAbortError()
 
                         # Enqueue current (parent) and child tasks.
                         self._task_enqueue_many(*(task_info, child_task_info))
