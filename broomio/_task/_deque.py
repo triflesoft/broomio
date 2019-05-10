@@ -63,10 +63,6 @@ class LoopTaskDeque(_LoopSlots):
             heapify(self._time_heapq)
 
     def _nursery_process_exception(self, nursery, task_info, exception):
-        if type(exception) is NurseryError:
-            if exception._exception_infos == nursery._exception_infos:
-                return
-
         if nursery._exception_policy == NurseryExceptionPolicy.Abort:
             # Save exception
             nursery._exception_infos.append(NurseryExceptionInfo(task_info, exception))
@@ -91,9 +87,12 @@ class LoopTaskDeque(_LoopSlots):
                     if not self._task_abort(nursery._task_info, nursery_error):
                         nursery._task_info.child_nursery = None
                         self._task_enqueue_one(nursery._task_info)
+
+                    nursery._exception_infos = []
                 else:
-                    nursery._task_info.child_nursery = None
-                    self._task_enqueue_one(nursery._task_info)
+                    if nursery._task_info.yield_func == SYSCALL_NURSERY_JOIN:
+                        nursery._task_info.child_nursery = None
+                        self._task_enqueue_one(nursery._task_info)
 
     def _task_abort(self, task_info, exception):
         # Throw exception in task.
@@ -355,7 +354,7 @@ class LoopTaskDeque(_LoopSlots):
                     socket_info = self._get_sock_info(fileno)
 
                     assert socket_info.recv_task_info is None, \
-                        f'Another task {socket_info.recv_task_info.coro} is already receiving on this socket.'
+                        f'Another task {socket_info.recv_task_info.coro} is already receiving ({task_info.yield_func}) on socket #{socket_info.fileno} ({socket_info.kind}).'
                     assert task_info.recv_fileno is None, \
                         'Task is already waiting for another socket to become readable.'
                     assert task_info.send_fileno is None, \
