@@ -19,7 +19,7 @@ if git.returncode == 0:
     commit_timestamp = int(git.stdout.strip(b'\n'))
     commit_datetime = datetime.utcfromtimestamp(commit_timestamp)
 
-version = f'0.2.{commit_datetime:%y%m%d}'
+version = f'0.5.{commit_datetime:%y%m%d}'
 
 setup(
     name='broomio',
@@ -29,10 +29,9 @@ setup(
     # maintainer='',
     # maintainer_email='',
     url='https://github.com/triflesoft/broomio',
-    license=license_text,
-    description='Broomio',
+    license='LGPL',
+    description='Fast AsyncIO Library',
     long_description=readme_text,
-    long_description_content_type='text/markdown',
     # keywords='',
     # platforms='',
     # fullname='',

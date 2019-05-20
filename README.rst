@@ -4,7 +4,7 @@ Broomio
 History
 -------
 
-Why one more async library? Broomio started as an experiment. This code meant to be thrown away. I was inspired by curio and trio libraries, code looked so clean and easy to understand. That was brave new Python, which is easy to understand. Curio is the first challenger, questioning existing standard library choices; and Trio is the place where real science happens. Also authors of both libraries are really friendly, thank you `David Beazley <https://github.com/dabeaz/>`_ and `Nathaniel J. Smith <https://github.com/njsmith>`_! However, I was curios what are Python asyncio limits? Can asyncio based network server written in beautiful clean manner be as performant as raw epoll based with ugly spagetti callbacks? It turns out the answer is yes, but not without some tradeoffs.
+Why one more async library? Broomio started as an experiment. This code meant to be thrown away. I was inspired by curio and trio libraries, code looked so clean and easy to understand. That was brave new Python, no callbacks, low maintenance. Curio is the first challenger, questioning existing standard library choices; and Trio is the place where real science happens. Also authors of both libraries are really friendly, thank you `David Beazley <https://github.com/dabeaz/>`_ and `Nathaniel J. Smith <https://github.com/njsmith>`_! However, I was curios what are Python asyncio limits? Can asyncio based network server written in beautiful clean manner be as performant as raw epoll based with ugly spagetti callbacks? It turns out the answer is yes, but not without some tradeoffs.
 
 Getting Started
 ---------------
