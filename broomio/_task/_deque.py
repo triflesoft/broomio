@@ -63,6 +63,10 @@ class LoopTaskDeque(_LoopSlots):
             heapify(self._time_heapq)
 
     def _nursery_process_exception(self, nursery, task_info, exception):
+        if isinstance(exception, NurseryError):
+            if exception._exception_infos == nursery._exception_infos:
+                return
+
         if nursery._exception_policy == NurseryExceptionPolicy.Abort:
             # Save exception
             nursery._exception_infos.append(NurseryExceptionInfo(task_info, exception))

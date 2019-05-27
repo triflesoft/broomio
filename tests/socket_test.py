@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 
-from socket import AF_INET
-from socket import AF_INET6
-from socket import AF_UNIX
-from socket import SOCK_DGRAM
-from socket import SOCK_STREAM
 from time import time
 from tracemalloc import start
 from unittest import main
@@ -25,43 +20,68 @@ start(4)
 class TestSocket(TestCase):
     def test_socket_attributes(self):
         async def create():
-            tcp_client_socket_4 = TcpClientSocket(4)
-            self.assertEqual(tcp_client_socket_4._socket.family, AF_INET)
-            self.assertEqual(tcp_client_socket_4._socket.type, SOCK_STREAM)
-            tcp_listen_socket_4 = TcpListenSocket(4)
-            self.assertEqual(tcp_listen_socket_4._socket.family, AF_INET)
-            self.assertEqual(tcp_listen_socket_4._socket.type, SOCK_STREAM)
+            try:
+                from socket import AF_INET
+                from socket import SOCK_DGRAM
+                from socket import SOCK_STREAM
 
-            tcp_client_socket_6 = TcpClientSocket(6)
-            self.assertEqual(tcp_client_socket_6._socket.family, AF_INET6)
-            self.assertEqual(tcp_client_socket_6._socket.type, SOCK_STREAM)
-            tcp_listen_socket_6 = TcpListenSocket(6)
-            self.assertEqual(tcp_listen_socket_6._socket.family, AF_INET6)
-            self.assertEqual(tcp_listen_socket_6._socket.type, SOCK_STREAM)
+                tcp_client_socket_4 = TcpClientSocket(4)
+                self.assertEqual(tcp_client_socket_4._socket.family, AF_INET)
+                self.assertEqual(tcp_client_socket_4._socket.type, SOCK_STREAM)
 
-            unix_client_socket = UnixClientSocket()
-            self.assertEqual(unix_client_socket._socket.family, AF_UNIX)
-            self.assertEqual(unix_client_socket._socket.type, SOCK_STREAM)
-            unix_listen_socket = UnixListenSocket()
-            self.assertEqual(unix_listen_socket._socket.family, AF_UNIX)
-            self.assertEqual(unix_listen_socket._socket.type, SOCK_STREAM)
+                tcp_listen_socket_4 = TcpListenSocket(4)
+                self.assertEqual(tcp_listen_socket_4._socket.family, AF_INET)
+                self.assertEqual(tcp_listen_socket_4._socket.type, SOCK_STREAM)
 
-            udp_socket_4 = UdpSocket(4)
-            self.assertEqual(udp_socket_4._socket.family, AF_INET)
-            self.assertEqual(udp_socket_4._socket.type, SOCK_DGRAM)
+                udp_socket_4 = UdpSocket(4)
+                self.assertEqual(udp_socket_4._socket.family, AF_INET)
+                self.assertEqual(udp_socket_4._socket.type, SOCK_DGRAM)
 
-            udp_socket_6 = UdpSocket(6)
-            self.assertEqual(udp_socket_6._socket.family, AF_INET6)
-            self.assertEqual(udp_socket_6._socket.type, SOCK_DGRAM)
+                await tcp_client_socket_4.close()
+                await tcp_listen_socket_4.close()
+                await udp_socket_4.close()
+            except ImportError:
+                pass
 
-            await tcp_client_socket_4.close()
-            await tcp_listen_socket_4.close()
-            await tcp_client_socket_6.close()
-            await tcp_listen_socket_6.close()
-            await unix_client_socket.close()
-            await unix_listen_socket.close()
-            await udp_socket_4.close()
-            await udp_socket_6.close()
+            try:
+                from socket import AF_INET6
+                from socket import SOCK_DGRAM
+                from socket import SOCK_STREAM
+
+                tcp_client_socket_6 = TcpClientSocket(6)
+                self.assertEqual(tcp_client_socket_6._socket.family, AF_INET6)
+                self.assertEqual(tcp_client_socket_6._socket.type, SOCK_STREAM)
+
+                tcp_listen_socket_6 = TcpListenSocket(6)
+                self.assertEqual(tcp_listen_socket_6._socket.family, AF_INET6)
+                self.assertEqual(tcp_listen_socket_6._socket.type, SOCK_STREAM)
+
+                udp_socket_6 = UdpSocket(6)
+                self.assertEqual(udp_socket_6._socket.family, AF_INET6)
+                self.assertEqual(udp_socket_6._socket.type, SOCK_DGRAM)
+
+                await tcp_client_socket_6.close()
+                await tcp_listen_socket_6.close()
+                await udp_socket_6.close()
+            except ImportError:
+                pass
+
+            try:
+                from socket import AF_UNIX
+                from socket import SOCK_STREAM
+
+                unix_client_socket = UnixClientSocket()
+                self.assertEqual(unix_client_socket._socket.family, AF_UNIX)
+                self.assertEqual(unix_client_socket._socket.type, SOCK_STREAM)
+                unix_listen_socket = UnixListenSocket()
+                self.assertEqual(unix_listen_socket._socket.family, AF_UNIX)
+                self.assertEqual(unix_listen_socket._socket.type, SOCK_STREAM)
+
+                await unix_client_socket.close()
+                await unix_listen_socket.close()
+            except ImportError:
+                pass
+
 
         loop = Loop()
         loop.start_soon(create())

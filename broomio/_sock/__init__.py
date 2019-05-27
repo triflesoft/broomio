@@ -2,15 +2,8 @@ from collections import defaultdict
 from os import path
 from os import strerror
 from os import unlink
-from socket import AF_INET
-from socket import AF_INET6
-from socket import AF_UNIX
-from socket import IPPROTO_TCP
-from socket import IPPROTO_UDP
 from socket import SHUT_WR
 from socket import SO_ERROR
-from socket import SOCK_DGRAM
-from socket import SOCK_STREAM
 from socket import socket
 from socket import SOL_SOCKET
 from ssl import MemoryBIO
@@ -108,12 +101,14 @@ try:
 except ImportError:
     SocketBase._opt_reuse_addr = None
 
+
 try:
     from socket import SO_REUSEPORT # pylint: disable=C0412
 
     SocketBase._opt_reuse_port = SO_REUSEPORT
 except ImportError:
     SocketBase._opt_reuse_port = None
+
 
 try:
     # FIXME: Some OSes support SO_PEERCRED while Python's socket module does not export this constant. \
@@ -125,162 +120,212 @@ except ImportError:
     SocketBase._opt_peer_cred = None
 
 
-_IP_FAMILY = {
-    4: AF_INET,
-    6: AF_INET6
-}
+_IP_VERSION_TO_ADDRESS_FAMILY = {}
 
 
-class UdpSocket(SocketBase):
-    def __init__(self, version=4):
-        super().__init__(socket_family=_IP_FAMILY[version], socket_type=SOCK_DGRAM, socket_protocol=IPPROTO_UDP)
+try:
+    from socket import AF_INET # pylint: disable=C0412
 
-    def bind(self, addr):
-        self._socket.bind(addr)
-
-    @coroutine
-    def recvfrom(self, size):
-        return (yield SYSCALL_SOCKET_RECVFROM, self._socket, size)
-
-    @coroutine
-    def recvfrom_into(self, data, size):
-        return (yield SYSCALL_SOCKET_RECVFROM_INTO, self._socket, data, size)
-
-    @coroutine
-    def sendto(self, data, addr):
-        return (yield SYSCALL_SOCKET_SENDTO, self._socket, data, addr)
+    _IP_VERSION_TO_ADDRESS_FAMILY[4] = AF_INET
+except ImportError:
+    pass
 
 
-class TcpClientSocket(SocketBase):
-    CAN_BE_CLIENT = True
-    CAN_BE_SERVER = False
+try:
+    from socket import AF_INET6 # pylint: disable=C0412
 
-    def __init__(self, version=4):
-        super().__init__(socket_family=_IP_FAMILY[version], socket_type=SOCK_STREAM, socket_protocol=IPPROTO_TCP)
-
-    def bind(self, addr):
-        self._socket.bind(addr)
-
-    @coroutine
-    def connect(self, addr):
-        return (yield SYSCALL_SOCKET_CONNECT, self._socket, addr)
-
-    @coroutine
-    def recv(self, size):
-        return (yield SYSCALL_SOCKET_RECV, self._socket, size)
-
-    @coroutine
-    def recv_into(self, data, size):
-        return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
-
-    @coroutine
-    def send(self, data):
-        return (yield SYSCALL_SOCKET_SEND, self._socket, data)
+    _IP_VERSION_TO_ADDRESS_FAMILY[6] = AF_INET6
+except ImportError:
+    pass
 
 
-class TcpServerSocket(SocketBase):
-    CAN_BE_CLIENT = False
-    CAN_BE_SERVER = True
+try:
+    from socket import SOCK_DGRAM # pylint: disable=C0412
 
-    def __init__(self, socket_obj):
-        super().__init__(socket_obj=socket_obj)
+    try:
+        from socket import IPPROTO_UDP # pylint: disable=C0412
 
-    @coroutine
-    def recv(self, size):
-        return (yield SYSCALL_SOCKET_RECV, self._socket, size)
+        class UdpSocket(SocketBase):
+            def __init__(self, version=4):
+                super().__init__(
+                    socket_family=_IP_VERSION_TO_ADDRESS_FAMILY[version],
+                    socket_type=SOCK_DGRAM,
+                    socket_protocol=IPPROTO_UDP)
 
-    @coroutine
-    def recv_into(self, data, size):
-        return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
+            def bind(self, addr):
+                self._socket.bind(addr)
 
-    @coroutine
-    def send(self, data):
-        return (yield SYSCALL_SOCKET_SEND, self._socket, data)
+            @coroutine
+            def recvfrom(self, size):
+                return (yield SYSCALL_SOCKET_RECVFROM, self._socket, size)
 
+            @coroutine
+            def recvfrom_into(self, data, size):
+                return (yield SYSCALL_SOCKET_RECVFROM_INTO, self._socket, data, size)
 
-class TcpListenSocket(SocketBase):
-    def __init__(self, version=4):
-        super().__init__(socket_family=_IP_FAMILY[version], socket_type=SOCK_STREAM, socket_protocol=IPPROTO_TCP)
-
-    def bind(self, addr):
-        self._socket.bind(addr)
-
-    @coroutine
-    def accept(self, nursery, handler_factory):
-        return (yield SYSCALL_SOCKET_ACCEPT, self._socket, nursery, TcpServerSocket, handler_factory)
-
-    @coroutine
-    def listen(self, backlog):
-        return (yield SYSCALL_SOCKET_LISTEN, self._socket, backlog)
+            @coroutine
+            def sendto(self, data, addr):
+                return (yield SYSCALL_SOCKET_SENDTO, self._socket, data, addr)
+    except ImportError:
+        pass
+except ImportError:
+    pass
 
 
-class UnixClientSocket(SocketBase):
-    CAN_BE_CLIENT = True
-    CAN_BE_SERVER = False
-
-    def __init__(self):
-        super().__init__(socket_family=AF_UNIX, socket_type=SOCK_STREAM, socket_protocol=0)
-
-    def bind(self, addr):
-        self._socket.bind(addr)
-
-    @coroutine
-    def connect(self, addr):
-        return (yield SYSCALL_SOCKET_CONNECT, self._socket, addr)
-
-    @coroutine
-    def recv(self, size):
-        return (yield SYSCALL_SOCKET_RECV, self._socket, size)
-
-    @coroutine
-    def recv_into(self, data, size):
-        return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
-
-    @coroutine
-    def send(self, data):
-        return (yield SYSCALL_SOCKET_SEND, self._socket, data)
+try:
+    from socket import SOCK_STREAM # pylint: disable=C0412
 
 
-class UnixServerSocket(SocketBase):
-    CAN_BE_CLIENT = False
-    CAN_BE_SERVER = True
-
-    def __init__(self, socket_obj):
-        super().__init__(socket_obj=socket_obj)
-
-    @coroutine
-    def recv(self, size):
-        return (yield SYSCALL_SOCKET_RECV, self._socket, size)
-
-    @coroutine
-    def recv_into(self, data, size):
-        return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
-
-    @coroutine
-    def send(self, data):
-        return (yield SYSCALL_SOCKET_SEND, self._socket, data)
+    try:
+        from socket import IPPROTO_TCP # pylint: disable=C0412
 
 
-class UnixListenSocket(SocketBase):
-    def __init__(self):
-        super().__init__(socket_family=AF_UNIX, socket_type=SOCK_STREAM, socket_protocol=0)
+        class TcpClientSocket(SocketBase):
+            CAN_BE_CLIENT = True
+            CAN_BE_SERVER = False
 
-    def bind(self, addr):
-        try:
-            unlink(addr)
-        except FileNotFoundError:
-            if path.exists(addr):
-                raise
+            def __init__(self, version=4):
+                super().__init__(
+                    socket_family=_IP_VERSION_TO_ADDRESS_FAMILY[version],
+                    socket_type=SOCK_STREAM,
+                    socket_protocol=IPPROTO_TCP)
 
-        self._socket.bind(addr)
+            def bind(self, addr):
+                self._socket.bind(addr)
 
-    @coroutine
-    def accept(self, nursery, handler_factory):
-        return (yield SYSCALL_SOCKET_ACCEPT, self._socket, nursery, UnixServerSocket, handler_factory)
+            @coroutine
+            def connect(self, addr):
+                return (yield SYSCALL_SOCKET_CONNECT, self._socket, addr)
 
-    @coroutine
-    def listen(self, backlog):
-        return (yield SYSCALL_SOCKET_LISTEN, self._socket, backlog)
+            @coroutine
+            def recv(self, size):
+                return (yield SYSCALL_SOCKET_RECV, self._socket, size)
+
+            @coroutine
+            def recv_into(self, data, size):
+                return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
+
+            @coroutine
+            def send(self, data):
+                return (yield SYSCALL_SOCKET_SEND, self._socket, data)
+
+
+        class TcpServerSocket(SocketBase):
+            CAN_BE_CLIENT = False
+            CAN_BE_SERVER = True
+
+            def __init__(self, socket_obj):
+                super().__init__(socket_obj=socket_obj)
+
+            @coroutine
+            def recv(self, size):
+                return (yield SYSCALL_SOCKET_RECV, self._socket, size)
+
+            @coroutine
+            def recv_into(self, data, size):
+                return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
+
+            @coroutine
+            def send(self, data):
+                return (yield SYSCALL_SOCKET_SEND, self._socket, data)
+
+
+        class TcpListenSocket(SocketBase):
+            def __init__(self, version=4):
+                super().__init__(
+                    socket_family=_IP_VERSION_TO_ADDRESS_FAMILY[version],
+                    socket_type=SOCK_STREAM,
+                    socket_protocol=IPPROTO_TCP)
+
+            def bind(self, addr):
+                self._socket.bind(addr)
+
+            @coroutine
+            def accept(self, nursery, handler_factory):
+                return (yield SYSCALL_SOCKET_ACCEPT, self._socket, nursery, TcpServerSocket, handler_factory)
+
+            @coroutine
+            def listen(self, backlog):
+                return (yield SYSCALL_SOCKET_LISTEN, self._socket, backlog)
+    except ImportError:
+        pass
+
+
+    try:
+        from socket import AF_UNIX # pylint: disable=C0412
+
+
+        class UnixClientSocket(SocketBase):
+            CAN_BE_CLIENT = True
+            CAN_BE_SERVER = False
+
+            def __init__(self):
+                super().__init__(socket_family=AF_UNIX, socket_type=SOCK_STREAM, socket_protocol=0)
+
+            def bind(self, addr):
+                self._socket.bind(addr)
+
+            @coroutine
+            def connect(self, addr):
+                return (yield SYSCALL_SOCKET_CONNECT, self._socket, addr)
+
+            @coroutine
+            def recv(self, size):
+                return (yield SYSCALL_SOCKET_RECV, self._socket, size)
+
+            @coroutine
+            def recv_into(self, data, size):
+                return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
+
+            @coroutine
+            def send(self, data):
+                return (yield SYSCALL_SOCKET_SEND, self._socket, data)
+
+
+        class UnixServerSocket(SocketBase):
+            CAN_BE_CLIENT = False
+            CAN_BE_SERVER = True
+
+            def __init__(self, socket_obj):
+                super().__init__(socket_obj=socket_obj)
+
+            @coroutine
+            def recv(self, size):
+                return (yield SYSCALL_SOCKET_RECV, self._socket, size)
+
+            @coroutine
+            def recv_into(self, data, size):
+                return (yield SYSCALL_SOCKET_RECV_INTO, self._socket, data, size)
+
+            @coroutine
+            def send(self, data):
+                return (yield SYSCALL_SOCKET_SEND, self._socket, data)
+
+
+        class UnixListenSocket(SocketBase):
+            def __init__(self):
+                super().__init__(socket_family=AF_UNIX, socket_type=SOCK_STREAM, socket_protocol=0)
+
+            def bind(self, addr):
+                try:
+                    unlink(addr)
+                except FileNotFoundError:
+                    if path.exists(addr):
+                        raise
+
+                self._socket.bind(addr)
+
+            @coroutine
+            def accept(self, nursery, handler_factory):
+                return (yield SYSCALL_SOCKET_ACCEPT, self._socket, nursery, UnixServerSocket, handler_factory)
+
+            @coroutine
+            def listen(self, backlog):
+                return (yield SYSCALL_SOCKET_LISTEN, self._socket, backlog)
+    except ImportError:
+        pass
+except ImportError:
+    pass
 
 
 class TlsSocket:

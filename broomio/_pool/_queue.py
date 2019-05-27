@@ -91,12 +91,17 @@ def _process_pool_process_worker(request_queue, response_queue, task_handler_fac
         try:
             send_args = task_handler(*request.args, **request.kwargs)
             response_queue.put(ProcessPoolResponce(request.task_info_id, send_args, None))
-        except BaseException as throw_exc:
+        except BaseException as throw_exc: # pylint: disable=W0703
             response_queue.put(ProcessPoolResponce(request.task_info_id, None, throw_exc))
 
 
 class ProcessPool:
-    __slots__ = 'loop', 'task_handler_factory', 'thread', 'processes', 'request_queue', 'response_queue', 'task_info_map'
+    __slots__ = \
+        'loop', \
+        'task_handler_factory', \
+        'thread', 'processes', \
+        'request_queue', 'response_queue', \
+        'task_info_map'
 
     def _thread_worker(self):
         while True:
@@ -121,7 +126,9 @@ class ProcessPool:
         self.task_info_map = {}
 
         for _ in range(thread_number):
-            process = Process(target=_process_pool_process_worker, args=(self.request_queue, self.response_queue, self.task_handler_factory))
+            process = Process(
+                target=_process_pool_process_worker,
+                args=(self.request_queue, self.response_queue, self.task_handler_factory))
             process.start()
             self.processes.append(process)
 

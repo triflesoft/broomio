@@ -2,12 +2,6 @@ from sys import _getframe
 from time import time
 from ._pool import execute
 from ._pool._queue import LoopPoolQueue
-from ._sock import TcpClientSocket
-from ._sock import TcpListenSocket
-from ._sock import TlsSocket
-from ._sock import UdpSocket
-from ._sock import UnixClientSocket
-from ._sock import UnixListenSocket
 from ._sock._epoll import LoopSockEpoll
 from ._task import Nursery
 from ._task import NurseryError
@@ -17,12 +11,53 @@ from ._time import sleep
 from ._time._heapq import LoopTimeHeapQ
 
 
-__all__ = [
-    'Loop',
-    'Nursery', 'NurseryError', 'NurseryExceptionPolicy',
-    'sleep',
-    'TcpClientSocket', 'TcpListenSocket', 'TlsSocket', 'UdpSocket', 'UnixClientSocket', 'UnixListenSocket',
-    'execute']
+__all__ = ['Loop', 'Nursery', 'NurseryError', 'NurseryExceptionPolicy', 'sleep']
+
+
+try:
+    from ._sock import TcpClientSocket
+
+    __all__.append('TcpClientSocket')
+except ImportError:
+    pass
+
+try:
+    from ._sock import TcpListenSocket
+
+    __all__.append('TcpListenSocket')
+except ImportError:
+    pass
+
+try:
+    from ._sock import TlsSocket
+
+    __all__.append('TlsSocket')
+except ImportError:
+    pass
+
+try:
+    from ._sock import UdpSocket
+
+    __all__.append('UdpSocket')
+except ImportError:
+    pass
+
+try:
+    from ._sock import UnixClientSocket
+
+    __all__.append('UnixClientSocket')
+except ImportError:
+    pass
+
+try:
+    from ._sock import UnixListenSocket
+
+    __all__.append('UnixListenSocket')
+except ImportError:
+    pass
+
+
+__all__ = __all__ + ['execute']
 
 
 class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ, LoopPoolQueue):
@@ -58,7 +93,8 @@ class Loop(LoopTaskDeque, LoopSockEpoll, LoopTimeHeapQ, LoopPoolQueue):
                     self._process_task()
                 # Are there any unhandler exceptions?
                 elif self._task_nursery._exception_infos:
-                    raise NurseryError(self._task_nursery._exception_infos) from self._task_nursery._exception_infos[0].exception
+                    raise NurseryError(self._task_nursery._exception_infos) \
+                        from self._task_nursery._exception_infos[0].exception
                 # Are there task which are scheduled to run later?
                 elif self._time_heapq:
                     self._process_time()

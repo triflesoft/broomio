@@ -1,6 +1,5 @@
 from enum import Enum
 from traceback import format_exception
-from traceback import print_exc
 from types import coroutine
 from .._syscalls import SYSCALL_NURSERY_INIT
 from .._syscalls import SYSCALL_NURSERY_JOIN
@@ -39,7 +38,11 @@ class NurseryError(Exception):
             #    parts.append(f'\n\tNurseryError @ {repr(exception_info.task_info.coro.cr_code)}')
             #else:
             #    #parts.append(f'\n\t{repr(exception_info.exception)} @ {repr(exception_info.task_info.coro.cr_code)}')
-            parts.append(format_exception(type(exception_info.exception), exception_info.exception, exception_info.exception.__traceback__))
+            parts.append(
+                format_exception(
+                    type(exception_info.exception),
+                    exception_info.exception,
+                    exception_info.exception.__traceback__))
 
         return ''.join(*parts)
 
