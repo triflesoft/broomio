@@ -40,7 +40,7 @@ class LoopSockEpoll(_LoopSlots):
                 handler = handler_factory(socket_factory(socket_obj=client_socket), client_address)
                 child_task_info = self._task_create_new(handler, task_info, stack_frames, nursery) # pylint: disable=E1101
                 self._task_enqueue_one(child_task_info)
-        except OSError:
+        except BlockingIOError:
             pass
 
         self._task_enqueue_one(task_info)
@@ -57,6 +57,7 @@ class LoopSockEpoll(_LoopSlots):
             task_info.send_args = size
         except OSError as os_error:
             task_info.throw_exc = os_error
+            task_info.throw_exc.fileno = socket_info.fileno
 
         self._task_enqueue_one(task_info)
 
@@ -72,6 +73,7 @@ class LoopSockEpoll(_LoopSlots):
             task_info.send_args = size
         except OSError as os_error:
             task_info.throw_exc = os_error
+            task_info.throw_exc.fileno = socket_info.fileno
 
         self._task_enqueue_one(task_info)
 
@@ -87,6 +89,7 @@ class LoopSockEpoll(_LoopSlots):
             task_info.send_args = data
         except OSError as os_error:
             task_info.throw_exc = os_error
+            task_info.throw_exc.fileno = socket_info.fileno
 
         self._task_enqueue_one(task_info)
 
@@ -102,6 +105,7 @@ class LoopSockEpoll(_LoopSlots):
             task_info.send_args = size
         except OSError as os_error:
             task_info.throw_exc = os_error
+            task_info.throw_exc.fileno = socket_info.fileno
 
         self._task_enqueue_one(task_info)
 
@@ -117,6 +121,7 @@ class LoopSockEpoll(_LoopSlots):
             task_info.send_args = data, addr
         except OSError as os_error:
             task_info.throw_exc = os_error
+            task_info.throw_exc.fileno = socket_info.fileno
 
         self._task_enqueue_one(task_info)
 
@@ -132,6 +137,7 @@ class LoopSockEpoll(_LoopSlots):
             task_info.send_args = size, addr
         except OSError as os_error:
             task_info.throw_exc = os_error
+            task_info.throw_exc.fileno = socket_info.fileno
 
         self._task_enqueue_one(task_info)
 
@@ -146,6 +152,7 @@ class LoopSockEpoll(_LoopSlots):
             sock.shutdown(how)
         except OSError as os_error:
             task_info.throw_exc = os_error
+            task_info.throw_exc.fileno = socket_info.fileno
 
         self._task_enqueue_one(task_info)
 
